@@ -1,4 +1,4 @@
 skiplist
 ========
 
-Implementing a nicely-behaving C++ skiplist
+A skiplist implementation in C++.
