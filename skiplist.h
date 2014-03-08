@@ -1,167 +1,166 @@
+
 #ifndef _SKIP_LIST_H_
 #define _SKIP_LIST_H_
 
 #include <vector>
 #include <time.h>
 #include <algorithm>
+#include <memory>
+#include <iostream>
 
-template<class K, class V>
-class slist {
-    private:
+/*
+* The goal here is to look like a first-class C++ object.
+* We can make multisets, and from there lists, (multi)maps,
+* and regular sets are more straightforward.
+*
+* This is largely for my own edification, but we also have
+* the goal of very carefully, explicitly explaining what
+* goes into a C++ container (assuming, of course, that I learn it!).
+*/
 
-        // This is a node in our linked list.
-        class node {
-            public:
-                unsigned h; // height
-                std::vector<node* > n; // links: our "next" nodes.
-                std::pair<K,V> d; // the actual data our node holds.
+const int height = 10;
 
-                node(unsigned h, K k, V v): h(h), n(h, NULL), d(k,v) {}
-                // straightforward copy, but we do NOT copy the links.
-                node(const node* s): h(s->h), n(s->h, NULL), d(s->d) {}
-
-                const K& key() { return d.first; }
-                const V& val() { return d.second; }
-        };
-        // arbitrarily picked height---parameterize later.
-        static const unsigned height = 10;
-
-        // our actual fields.
-        const node* tail;
-        node* head;
-
-        // an iterator for our container.
-        // should inherit from iterator traits etc.
-        class iter {
-            public:
-                node* n;
-                iter(node* n): n(n) {}
-                iter& operator++() {
-                    n = n->n[0];
-                    return *this;
-                }
-                const std::pair<K,V>& operator*() {
-                    return n->d;
-                }
-                const std::pair<K,V>* operator->() const {
-                    return &(n->d);
-                }
-                bool operator==(const iter& i) const {
-                    // if they're both pointing to the same node.
-                    // (in memory, of course)
-                    return i.n == n;
-                }
-                bool operator!=(const iter& i) const {
-                    return !((*this) == i);
-                }
-                bool operator<(K k) const {
-                    return n->key() < k;
-                }
-        };
+template<class T, class Compare = std::less<T>, class Alloc = std::allocator<T>>
+class skiplist_multiset {
     public:
-        // this is cheating! figure out how to make a real const_iterator.
-        typedef iter const_iterator;
+    const static int H = 10;
+    // represents the links in the skiplist.
+    // zero-indexed, with vector[0] being the lowest level,
+    // vector[height-1] being the highest.
 
-        slist();
-        slist(const slist<K,V>& o); 
-        ~slist(); 
-        const_iterator begin() const;
-        const_iterator end() const;
-        bool empty() const ;
-        bool has(K k) const ; 
-        void insert(K k, V v);
-        void remove(K k);
+    class node;
+
+    typedef std::vector<std::shared_ptr<node>> edge_list;
+
+    // This represents the node in our linked list
+    class node {
+        public:
+        edge_list edges;
+        T data;
+        node(const T& data, int height): edges(height, NULL), data(data) {}
+    };
+
+    static int get_max_prior_height(const edge_list& e, const T& data) {
+        for (int i = H-1; i >= 0; --i) {
+            if (e[i] != NULL && e[i]->data < data) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    // when we proceed through the skiplist, we want to remember all possible predecessors,
+    static edge_list get_priors(const edge_list& e, const T& data, bool equality = false) {
+        edge_list priors(H, NULL);
+        int height = get_max_prior_height(e, data);
+        if (height >= 0) {
+            std::shared_ptr<node> n = e[height];
+            for (; height >= 0; --height) {
+                // this can probably be phrased better. The only different in cases is the <= vs <
+                if (!equality) {
+                    while (n->edges[height] != NULL && n->edges[height]->data < data) {
+                        n = n->edges[height];
+                    }
+                }
+                if (equality) {
+                    while (n->edges[height] != NULL && n->edges[height]->data <= data) {
+                        n = n->edges[height];
+                    }
+                }
+                priors[height] = n;
+            }
+        }
+        return priors;
+    }
+
+
+    int rheight() {
+        int height = 1;
+        while (rand() % 2 == 0 && height < H) {
+            ++height;
+        }
+        return height;
+    }
+
+    edge_list head;
+    public:
+    skiplist_multiset(): head(H,NULL) {}
+
+    // http://stackoverflow.com/questions/7758580/writing-your-own-stl-container/7759622#7759622
+    // design decision: may want to save the "priors", so can be more easily used for "erase".
+    class const_iterator : public std::iterator<std::forward_iterator_tag,T> {
+        private:
+        const node* ptr;
+        public:
+        // point of confusion: is there actually a difference between these operators?
+        // the SO site says that operator-> returns T* instead. Confusing.
+        const T& operator*() const { return ptr->data; }
+        const T& operator->() const { return ptr->data; }
+        bool operator==(const const_iterator& c) { return ptr == c.ptr; }
+        bool operator!=(const const_iterator& c) { return ptr != c.ptr; }
+        const_iterator& operator=(const const_iterator&c ) { ptr = c.ptr; }
+        const_iterator(): ptr(NULL) {}
+        const_iterator(const const_iterator& c): ptr(c.ptr) {}
+        const_iterator(node* ptr): ptr(ptr) {}
+    };
+
+    const_iterator begin() const { return const_iterator(head[0]); }
+    const_iterator end() const { return const_iterator(); }
+
+    const_iterator find(const T& data) const {
+        auto priors = get_priors(head, data);
+        if (priors[0] != NULL && // is there any element we have less than data?
+            priors[0]->edges[0] != NULL && // if so, is there an element right after?
+            priors[0]->edges[0]->data == data) { // if so, is it actually our element?
+            return const_iterator(priors[0]->edges[0]);
+        }
+
+        // edge case: if data is the smallest element, it may be head:
+        if (head[0] != NULL && head[0]->data == data) {
+            return const_iterator(head[0]);
+        }
+        return end();
+    }
+
+    bool insert(const T& data) {
+        // according to http://en.cppreference.com/w/cpp/container/multiset/insert,
+        // this should insert *after* everything else. Hence we use equality.
+        auto priors = get_priors(head, data, true);
+        int node_height = rheight();
+        std::shared_ptr<node> to_insert(new node(data,height));
+
+        for (unsigned i = 0; i < node_height; ++i) {
+            if (priors[i] == NULL) {
+                std::cout << "For i = " << i << ", priors[i] is NULL" << std::endl;
+                to_insert->edges[i] = head[i];
+                head[i] = to_insert;
+            }
+            else {
+                std::cout << "For i = " << i << ", priors[i] points to " << priors[i]->data << std::endl;
+                to_insert->edges[i] = priors[i]->edges[i];
+                priors[i]->edges[i] = to_insert;
+            }
+        }
+        std::cout << "Is head[0] null? " << (head[0] == NULL) << std::endl;
+        return true;
+    }
+
+    // erasing all the values with k is tricky---the priors vector may behave strangely over
+    // erasing multiple elements.
+    // Need some kind of backtracking process.
+    bool erase(const T& data) {
+        auto priors = get_priors(head, data);
+
+    }
+
+    void print(std::ostream& o) {
+        std::shared_ptr<node> n = head[0];
+        o << "Is the first n equal to null? " << (n == NULL) << "\n";
+        while (n != NULL) {
+            o << n->data << " ";
+            n = n->edges[0];
+        }
+    }
 };
 
-
-
-//
-// These are the executable code.
-//
-//
-unsigned rlevel(const unsigned height) {
-    unsigned lvl = 1;
-    while (static_cast<double>(rand())/RAND_MAX < (0.5) && lvl < height-1) { ++lvl; }
-    return lvl;
-}
-
-template<class K, class V>
-slist<K,V>::~slist() {
-    node* prev = head;
-    while (head != NULL) {
-        head = head->n[0];
-        delete prev;
-        prev = head;
-    }
-}
-
-
-template<class K, class V>
-slist<K,V>::slist(const slist<K,V>& o): tail(NULL), head(new node(o.head)) {
-    for (slist<K,V>::const_iterator it = o.begin(); it != o.end(); ++it) {
-        insert(it->first,it->second);
-    }
-}
-
-template<class K, class V>
-slist<K,V>::slist(): tail(NULL), head(new node(height, K(), V())) { }
-
-template<class K, class V>
-typename slist<K,V>::const_iterator slist<K,V>::begin() const { return iter(head->n[0]); }
-
-template<class K, class V>
-typename slist<K,V>::const_iterator slist<K,V>::end() const { return iter(NULL); }
-
-template<class K, class V>
-bool slist<K,V>::empty() const {
-    for (int i = 0; i < height; ++i) {
-        if (head[i] != NULL) { return true; }
-    }
-    return false;
-}
-
-template<class K, class V>
-bool slist<K,V>::has(K k) const {
-    node* x = head;
-    for (int i = height-1; i >= 0; --i) {
-        while (x->n[i] != tail && x->n[i]->key() < k) {
-            x = x->n[i];
-        }
-    }
-    x = x->n[0];
-    return (!(x == NULL || x->key() != k));
-}
-
-
-
-template<class K, class V>
-void slist<K,V>::insert(K k, V v) {
-    node* x = head;
-    
-    // this keeps track of the nodes that will
-    // be pointing to our newly inserted node.
-    std::vector<node*> update(height, NULL);
-
-    // going from the highest to the lowest,
-    for (int i = height-1; i >= 0; --i) {
-        // if we find an intermediary node less than our key
-        while (x->n[i] != tail && x->n[i]->key() < k) {
-            // continue
-            x = x->n[i];
-        }
-        // remember 
-        update[i] = x;
-    }
-
-    x = x->n[0];
-    if (x != NULL && x->key() == k) {
-        return;
-    }
-    unsigned lvl = rlevel(height);
-    node* y = new node(lvl, k, v);
-    for (unsigned i = 0; i < lvl; ++i) {
-        y->n[i] = update[i]->n[i];
-        update[i]->n[i] = y;
-    }
-}
 #endif
