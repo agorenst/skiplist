@@ -32,6 +32,73 @@ class skiplist_multiset {
 
     typedef std::vector<std::shared_ptr<node>> edge_list;
 
+    class link_slice {
+        protected:
+        std::vector<std::shared_ptr<node>> links;
+    };
+
+    class prior_slice : public link_slice {
+        private:
+        bool invariant_element_ordering() const {
+            // say our data is 8
+            // height[0] is the closest element, 7
+            // height[1] is the next-closest, 6
+            // height[2] may be 5 (or 6), or it may be NULL;
+
+            for (unsigned i = 0; i < links.size()-1; ++i) {
+                if (links[i] != NULL) {
+                    assert(links[i+1] == NULL || links[i+1]->data <= links[i]->data);
+                }
+            }
+        }
+        bool invariant_null_ordering() const {
+            for (unsigned i = 0; i < links.size()-1; ++i) {
+                if (links[i] == NULL) {
+                    assert(links[i+1] == NULL);
+                    // if a higher height (i+1) is not null, then "at least"
+                    // links[i] = links[i+1], so this is a contradiction.
+                }
+            }
+        }
+        bool invariant_prior_validity(const T& data) const {
+            for (unsigned i = 0; i < links.size(); ++i) {
+                if (p != NULL) {
+                    assert(p->data <= data && (p->next[i] == NULL || p->next[i]->data > data));
+                }
+            }
+        }
+    };
+
+
+    class successor_slice : public link_slice {
+        private:
+        bool invariant_element_ordering() const {
+            for (unsigned i = 0; i < links.size()-1; ++i) {
+                // intuitively, links[0] is the next-largest element ---
+                // links[1] is something a little larger, or NULL
+                if (links[i] != NULL) {
+                    assert(links[i+1] == NULL || links[i+1]->data >= links[i]->data);
+                }
+            }
+        }
+        bool invariant_null_ordering() const {
+            for (unsigned i = 0; i < links.size()-1; ++i) {
+                if (links[i] == NULL) {
+                    // intuitively, links[0] is the next-largest element ---
+                    // if anything is non-null, this is
+                    assert(links[i+1] == NULL);
+                }
+            }
+        }
+        bool invariant_prior_validity(const T& data) conts {
+            for (unsigned i = 0; i < links.size(); ++i) {
+                if (p != NULL) {
+                    assert(p->data > data);
+                }
+            }
+        }
+    };
+
     // This represents the node in our linked list
     class node {
         public:
