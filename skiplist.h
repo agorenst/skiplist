@@ -8,12 +8,15 @@
 #include <iterator>
 
 //template<typename T, int max_height, std::function<int()> rnd>
-template<typename T, int max_height, int (*gen)()>
+template<typename T, int max_height, int (*gen)(),
+         class Compare = std::less<T>,
+         class Allocator = std::allocator<T>>
 class skip_list {
     private:
     struct node;
     typedef std::vector<std::shared_ptr<node>> slice;
-    //typedef std::vector<node*> slice;
+    // the only field, and we initialize it.
+    slice heads{max_height, nullptr};
 
     struct node {
         T e;
@@ -22,24 +25,11 @@ class skip_list {
         node(T&& e, slice&& s): e(e), s(s) {}
     };
 
-    void dbg_print_slice(const slice& s) {
-        //std::for_each(std::rbegin(s), std::rend(s), [](const auto& m){
-        //    printf("\t(%p)", m.get());
-        //    printf("\n");
-        //});
-    }
 
-    void dbg_print_node(node* n) {
-        //printf("node (%p)\n", n);
-        //dbg_print_slice(n->s);
-    }
-
-    slice heads{max_height, nullptr};
-
-    slice slice_preceeding(T e, int height = max_height) {
+    slice slice_preceeding(T e) {
         slice result{max_height, nullptr};
         slice* curr = &heads;
-        for (int i = height - 1; i >= 0; --i) {
+        for (int i = max_height - 1; i >= 0; --i) {
             // TODO revisit the >= in light of multiset.
             if ((*curr)[i] == nullptr || (*curr)[i]->e >= e) {
                 result[i] = nullptr;
@@ -47,6 +37,7 @@ class skip_list {
             else {
                 auto candidate_node = (*curr)[i];
                 while (candidate_node->s[i] && candidate_node->s[i]->e < e) {
+                    curr = &(candidate_node->s);
                     candidate_node = candidate_node->s[i];
                 }
                 result[i] = candidate_node;
@@ -60,16 +51,57 @@ class skip_list {
     }
 
     public:
+    typedef T                                               key_type;
+    typedef T                                               value_type;
+    typedef std::size_t                                     size_type;
+    typedef std::ptrdiff_t                                  difference_type;
+    typedef Compare                                         key_compare;
+    typedef Compare                                         value_compare;
+    typedef Allocator                                       allocator_type;
+    typedef value_type&                                     reference;
+    typedef const value_type&                               const_reference;
+    typedef typename std::allocator_traits<Allocator>::pointer       pointer;
+    typedef typename std::allocator_traits<Allocator>::const_pointer const_pointer;
+    struct iterator;
+    struct const_iterator;
+    
+    skip_list() = default;
+    template<class ITER>
+    skip_list(ITER start, ITER finish) {
+        for (; start != finish; ++start) {
+            insert(*start);
+        }
+    }
+    skip_list(const std::initializer_list<T>& l) {
+        for (auto&& x : l) {
+            insert(x);
+        }
+    }
 
-    void insert(T e) {
+    //skip_list& operator=(const skip_list& that);
+    //skip_list& operator=(skip_list&& that);
+    //skip_list& operator=(std::initializer_list<T> l);
+
+
+    void clear() {
+        // we trust smart pointers to clean this up.
+        std::fill(begin(heads), end(heads), nullptr);
+    }
+
+    // TODO the parameter is not right.
+    std::pair<iterator,bool> insert(const value_type& value) {
         int new_height = generate_height();
         slice new_slice(new_height, nullptr);
-        auto new_node = std::make_shared<node>(e, new_slice);
-        //auto new_node = new node(e, new_slice);
+        auto new_node = std::make_shared<node>(value, new_slice);
 
-        slice predecessors = slice_preceeding(e, new_height);
-        //printf("found predecessor slice for %d:\n", e);
-        dbg_print_slice(predecessors);
+        slice predecessors = slice_preceeding(value);
+        // TODO: watch for multiset functionality...
+        // do we already have the element?
+        if (predecessors[0] &&
+            predecessors[0]->s[0] &&
+            predecessors[0]->s[0]->e == value) {
+            return {end(),false};
+        }
         for (int i = 0; i < new_height; ++i) {
             if (predecessors[i] == nullptr) {
                 new_node->s[i] = heads[i];
@@ -80,59 +112,60 @@ class skip_list {
                 predecessors[i]->s[i] = new_node;
             }
         }
+        return {new_node.get(), true};
+    }
+    template<typename InputIt>
+    void insert(InputIt first, InputIt last) {
+        for (; first != last; first++) {
+            insert(*first);
+        }
     }
 
     bool contains(T e) const {
-        auto curr = heads[max_height];
-        int i = max_height - 2;
-        for (; i >= 0; --i) {
-            while (curr == nullptr || curr->e > e) {
-                curr = heads[i];
-            }
-        }
-        if (curr == nullptr) {
-            assert(i == 0);
-            return false;
-        }
-        while (i > 0) {
-            while (curr && curr->e > e) {
-                curr = curr->s[i];
-            }
-            --i;
-        }
-        return curr && curr->e == e;
+        return find(e) == nullptr;
     }
 
     void erase(T e) {
-        slice to_stitch = slice_preceeding(e, max_height);
-        //printf("erase: found predecessor slice for %d:\n", e);
-        dbg_print_slice(to_stitch);
+        slice to_stitch = slice_preceeding(e);
         for (int i = max_height - 1; i >= 0; --i) {
             if (to_stitch[i]) {
                 assert(to_stitch[i]->s[i]->e == e);
                 to_stitch[i]->s[i] = to_stitch[i]->s[i]->s[i];
             }
-            else if (heads[i]) {
-                assert(heads[i]->e == e);
+            else if (heads[i] && heads[i]->e == e) {
                 heads[i] = heads[i]->s[i];
             }
         }
     }
     
-    void dbg_print_list() {
-        //auto curr = heads[0];
-        //printf("head:\n");
-        //dbg_print_slice(heads);
-        //while (curr) {
-        //    dbg_print_node(curr.get());
-        //    curr = curr->s[0];
-        //}
-    }
-
 
 // Definitely temporary, just getting things hooked up.
-    struct iterator {
+    struct const_iterator : public std::iterator<std::forward_iterator_tag,
+                                    T,
+                                    int,
+                                    T*,
+                                    T&>{
+        const node* mynode;
+        const_iterator(node* n): mynode(n) {}
+        const_iterator& operator++() {
+            //printf("increment mynode from %p\n", mynode);
+            if (mynode) { mynode = mynode->s[0].get(); }
+            //printf("now: %p\n", mynode);
+            return *this;
+        }
+        T operator*() { return mynode->e; }
+        bool operator==(const const_iterator& that) const { return mynode == that.mynode; }
+        bool operator!=(const const_iterator& that) const { return !((*this) == that); }
+    };
+// Definitely temporary, just getting things hooked up.
+    struct iterator : public std::iterator<std::forward_iterator_tag,
+                                    T,
+                                    int,
+                                    T*,
+                                    T&>{
         node* mynode;
+        iterator(const const_iterator& that): mynode(that.mynode) {}
+        iterator(node* n): mynode(n) {}
         iterator& operator++() {
             //printf("increment mynode from %p\n", mynode);
             if (mynode) { mynode = mynode->s[0].get(); }
@@ -152,5 +185,68 @@ class skip_list {
         //printf("Making a new end iterator\n");
         return iterator{nullptr};
     }
+    const_iterator begin() const {
+        return const_iterator{heads[0].get()};
+    }
+    const_iterator end() const {
+        return const_iterator{nullptr};
+    }
+
+    bool empty() const noexcept {
+        return !heads[0];
+    }
+    // very slow for now!
+    size_type size() const noexcept {
+        return std::distance(begin(), end());
+    }
+
+
+    // Basic find operation. Returns an iterator containing
+    // the node with the value equal to e, or end()
+    // TODO: Can probably clean up the looping/conditional logic.
+    iterator find(const T& e) {
+        int i = max_height - 1;
+
+        // find the highest non-null element.
+        while (i >= 0 && !heads[i]) { --i; };
+        if (i < 0) { return end(); }
+        auto curr = heads[i];
+        assert(curr);
+        while (i > 0) {
+            while (curr && curr->e > e) {
+                curr = curr->s[i];
+            }
+            --i;
+        }
+        if (curr && curr->e == e) {
+            return iterator{curr.get()};
+        }
+        else {
+            return end();
+        }
+    }
+    const_iterator find(const T& e) const {
+        int i = max_height - 1;
+
+        // find the highest non-null element.
+        while (i >= 0 && !heads[i]) { --i; };
+        if (i < 0) { return end(); }
+        auto curr = heads[i];
+        assert(curr);
+        while (i > 0) {
+            while (curr && curr->e > e) {
+                curr = curr->s[i];
+            }
+            --i;
+        }
+        if (curr && curr->e == e) {
+            return iterator{curr.get()};
+        }
+        else {
+            return end();
+        }
+    }
+    //template<class K> iterator find(const K& k);
+    //template<class K> const_iterator find(const K& k) const;
 
 };
