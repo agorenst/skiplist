@@ -1,4 +1,5 @@
-tests: basic_set_interface exhaustive_testing skiplist_test
+tests: skiplist_test
+#tests: basic_set_interface exhaustive_testing skiplist_test
 
 basic_set_interface: basic_set_interface.cpp skiplist.h
 	clang++ -g -Wall -std=c++14 basic_set_interface.cpp -o basic_set_interface

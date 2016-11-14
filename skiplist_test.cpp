@@ -3,12 +3,13 @@
 #include <random>
 #include <algorithm>
 #include <iostream>
+#include <limits>
 
 using namespace std;
 
 std::random_device rd;
 std::mt19937 gen(rd());
-std::uniform_int_distribution<> dis(0, 1);
+std::uniform_int_distribution<> dis(0, 1 << 30);
 
 int ntz(unsigned x) {
     if (x == 0) { return 32; }
@@ -40,8 +41,12 @@ void performance_test() {
     for (int i = 0; i < perm_size; ++i) {
         x[i] = i;
     }
+    long long i = 0;
     do {
+        ++i;
+        l.LOG_reset_node_stepped();
         l.insert(x);
+        printf("%lld\t%d\n", i, l.LOG_get_node_stepped());
     } while (next_permutation(begin(x), end(x)));
 //    for (auto&& x : l) {
 //        for (auto&& e : x) { cout << e << " "; }

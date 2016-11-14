@@ -14,9 +14,26 @@ template<typename T, int max_height, int (*gen)(),
 class skip_list {
     private:
     struct node;
-    typedef std::vector<std::shared_ptr<node>> slice;
+    typedef node* pnode;
+    typedef std::vector<pnode> slice;
     // the only field, and we initialize it.
     slice heads{max_height, nullptr};
+
+    // Logging information to track performance.
+    // Currently single-threaded...
+    int node_stepped = 0;
+
+    void LOG_node_stepped() {
+        node_stepped++;
+    }
+public:
+    int LOG_get_node_stepped() const {
+        return node_stepped;
+    }
+    void LOG_reset_node_stepped() {
+        node_stepped = 0;
+    }
+    private:
 
     struct node {
         T e;
@@ -26,7 +43,8 @@ class skip_list {
     };
 
 
-    slice slice_preceeding(T e) {
+    // A very core helper function. This is how we navigate
+    slice slice_preceeding(const T& e) {
         slice result{max_height, nullptr};
         slice* curr = &heads;
         for (int i = max_height - 1; i >= 0; --i) {
@@ -39,6 +57,7 @@ class skip_list {
                 while (candidate_node->s[i] && candidate_node->s[i]->e < e) {
                     curr = &(candidate_node->s);
                     candidate_node = candidate_node->s[i];
+                    LOG_node_stepped();
                 }
                 result[i] = candidate_node;
             }
@@ -77,6 +96,9 @@ class skip_list {
             insert(x);
         }
     }
+    ~skip_list() {
+        clear();
+    }
 
     //skip_list& operator=(const skip_list& that);
     //skip_list& operator=(skip_list&& that);
@@ -84,16 +106,17 @@ class skip_list {
 
 
     void clear() {
-        // we trust smart pointers to clean this up.
-        std::fill(begin(heads), end(heads), nullptr);
+        node* curr = heads[0];
+        while (curr) {
+            auto to_del = curr;
+            curr = curr->s[0];
+            delete to_del;
+        }
+        std::fill(std::begin(heads), std::end(heads), nullptr);
     }
 
     // TODO the parameter is not right.
     std::pair<iterator,bool> insert(const value_type& value) {
-        int new_height = generate_height();
-        slice new_slice(new_height, nullptr);
-        auto new_node = std::make_shared<node>(value, new_slice);
-
         slice predecessors = slice_preceeding(value);
         // TODO: watch for multiset functionality...
         // do we already have the element?
@@ -102,6 +125,11 @@ class skip_list {
             predecessors[0]->s[0]->e == value) {
             return {end(),false};
         }
+
+        int new_height = generate_height();
+        slice new_slice(new_height, nullptr);
+        auto new_node = new node{value, new_slice};
+
         for (int i = 0; i < new_height; ++i) {
             if (predecessors[i] == nullptr) {
                 new_node->s[i] = heads[i];
@@ -112,7 +140,7 @@ class skip_list {
                 predecessors[i]->s[i] = new_node;
             }
         }
-        return {new_node.get(), true};
+        return {new_node, true};
     }
     template<typename InputIt>
     void insert(InputIt first, InputIt last) {
@@ -127,14 +155,22 @@ class skip_list {
 
     void erase(T e) {
         slice to_stitch = slice_preceeding(e);
+        node* to_del = nullptr;
+        if (to_stitch[0] && to_stitch[0]->s[0]) {
+            to_del = to_stitch[0]->s[0];
+        }
         for (int i = max_height - 1; i >= 0; --i) {
             if (to_stitch[i]) {
                 assert(to_stitch[i]->s[i]->e == e);
                 to_stitch[i]->s[i] = to_stitch[i]->s[i]->s[i];
             }
             else if (heads[i] && heads[i]->e == e) {
+                if (!to_del) { to_del = heads[i]; }
                 heads[i] = heads[i]->s[i];
             }
+        }
+        if (to_del) {
+            delete to_del;
         }
     }
     
@@ -149,7 +185,7 @@ class skip_list {
         const_iterator(node* n): mynode(n) {}
         const_iterator& operator++() {
             //printf("increment mynode from %p\n", mynode);
-            if (mynode) { mynode = mynode->s[0].get(); }
+            if (mynode) { mynode = mynode->s[0]; }
             //printf("now: %p\n", mynode);
             return *this;
         }
@@ -168,7 +204,7 @@ class skip_list {
         iterator(node* n): mynode(n) {}
         iterator& operator++() {
             //printf("increment mynode from %p\n", mynode);
-            if (mynode) { mynode = mynode->s[0].get(); }
+            if (mynode) { mynode = mynode->s[0]; }
             //printf("now: %p\n", mynode);
             return *this;
         }
@@ -178,15 +214,14 @@ class skip_list {
     };
 
     iterator begin() {
-        //printf("Making a new iterator with %p\n", heads[0].get());
-        return iterator{heads[0].get()};
+        return iterator{heads[0]};
     }
     iterator end() {
         //printf("Making a new end iterator\n");
         return iterator{nullptr};
     }
     const_iterator begin() const {
-        return const_iterator{heads[0].get()};
+        return const_iterator{heads[0]};
     }
     const_iterator end() const {
         return const_iterator{nullptr};
@@ -219,7 +254,7 @@ class skip_list {
             --i;
         }
         if (curr && curr->e == e) {
-            return iterator{curr.get()};
+            return iterator{curr};
         }
         else {
             return end();
@@ -240,7 +275,7 @@ class skip_list {
             --i;
         }
         if (curr && curr->e == e) {
-            return iterator{curr.get()};
+            return iterator{curr};
         }
         else {
             return end();
