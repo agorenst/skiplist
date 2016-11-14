@@ -30,8 +30,30 @@ int good_height_generator() {
     return ntz(dis(gen))-1;
 }
 
+// dead-stupid timer thanks to http://stackoverflow.com/questions/2808398/easily-measure-elapsed-time
+#include <chrono>
+
+template<typename TimeT = std::chrono::milliseconds>
+struct measure
+{
+    template<typename F, typename ...Args>
+        static typename TimeT::rep execution(F&& func, Args&&... args)
+        {
+            auto start = std::chrono::steady_clock::now();
+            std::forward<decltype(func)>(func)(std::forward<Args>(args)...);
+            auto duration = std::chrono::duration_cast< TimeT> 
+                (std::chrono::steady_clock::now() - start);
+            return duration.count();
+        }
+};
+
+//int main() {
+//    std::cout << measure<>::execution(functor(dummy)) << std::endl;
+//}
+
+
 template<typename C, int L>
-void increasing_permutation_insert() {
+void always_add_larger_permutation() {
     vector<int> x(L);
     C container;
     for (int i = 0; i < L; ++i) {
@@ -47,13 +69,44 @@ void increasing_permutation_insert() {
     cout << endl;
 }
 
+template<typename C, int L>
+void always_add_smaller_permutation() {
+    vector<int> x(L);
+    C container;
+    for (int i = 0; i < L; ++i) {
+        x[L-(i+1)] = i;
+    }
+    do {
+        // sanity check
+        //for_each(begin(x), end(x), [](int x) { 
+        //    cout << x << " ";
+        //});
+        //cout << endl;
+        container.insert(x);
+    } while(prev_permutation(begin(x), end(x)));
+    auto first_elt = *begin(container);
+    for_each(begin(first_elt), end(first_elt), [](int x) {
+        cout << x << " ";
+    });
+    cout << endl;
+}
+
+template<typename C, int L>
+void increasing_permutation_insert() {
+}
+
 int main() {
     typedef std::set<vector<int>> baseline_type;
     typedef skip_list<vector<int>, 32, good_height_generator> skiplist_type;
+    const int INPUT_SIZE=10;
 
-#ifdef STD_SET
-    increasing_permutation_insert<baseline_type, 6>();
-#elif SKIPLIST_SET
-    increasing_permutation_insert<skiplist_type, 6>();
-#endif
+    auto t = measure<>::execution(always_add_larger_permutation<baseline_type, INPUT_SIZE>);
+    cout << "call 1: " << t << endl;
+    t = measure<>::execution(always_add_smaller_permutation<baseline_type, INPUT_SIZE>);
+    cout << "call 2: " << t << endl;
+
+    t = measure<>::execution(always_add_larger_permutation<skiplist_type, INPUT_SIZE>);
+    cout << "call 1: " << t << endl;
+    t = measure<>::execution(always_add_smaller_permutation<skiplist_type, INPUT_SIZE>);
+    cout << "call 2: " << t << endl;
 }

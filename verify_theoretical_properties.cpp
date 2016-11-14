@@ -60,6 +60,23 @@ void count_asymptotic_behavior() {
     } while (next_permutation(begin(x), end(x)));
 }
 
+// I'd expect this to ONLY be 1
+template<int L>
+void count_asymptotic_behavior_degenerate() {
+    vector<int> x(L);
+    for (int i = 0; i < L; ++i) { x[L-(i+1)] = i; }
+    skip_list<vector<int>, 32, good_height_generator> l;
+    long long i = 0;
+    do {
+        ++i;
+        l.LOG_reset_node_stepped();
+        l.insert(x);
+        auto c = l.LOG_get_node_stepped();
+        printf("%lld\t%d\t%f\n", i, c, log2(i));
+    } while (prev_permutation(begin(x), end(x)));
+}
+
 int main() {
-    count_asymptotic_behavior<9>();
+    //count_asymptotic_behavior<9>();
+    count_asymptotic_behavior_degenerate<10>();
 }
