@@ -61,6 +61,7 @@ void count_asymptotic_behavior() {
 }
 
 // I'd expect this to ONLY be 1
+// Other interesting question: number of elements compared?
 template<int L>
 void count_asymptotic_behavior_degenerate() {
     vector<int> x(L);
@@ -70,9 +71,11 @@ void count_asymptotic_behavior_degenerate() {
     do {
         ++i;
         l.LOG_reset_node_stepped();
+        l.LOG_reset_elt_comparisons();
         l.insert(x);
         auto c = l.LOG_get_node_stepped();
-        printf("%lld\t%d\t%f\n", i, c, log2(i));
+        auto d = l.LOG_get_elt_comparisons();
+        printf("%lld\t%d\t%d\t%f\n", i, c, d, log2(i));
     } while (prev_permutation(begin(x), end(x)));
 }
 

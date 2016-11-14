@@ -9,8 +9,10 @@
 
 #ifdef LOGGING_INFO
 #define LOG_NODE_STEP LOG_node_stepped()
+#define LOG_ELT_COMPARISON LOG_elt_comparison()
 #else
 #define LOG_NODE_STEP
+#define LOG_ELT_COMPARISON
 #endif
 
 //template<typename T, int max_height, std::function<int()> rnd>
@@ -29,9 +31,13 @@ class skip_list {
     // Logging information to track performance.
     // Currently single-threaded...
     int node_stepped = 0;
+    int elt_compared = 0;
 
     void LOG_node_stepped() {
         node_stepped++;
+    }
+    void LOG_elt_comparison() {
+        elt_compared++;
     }
 public:
     int LOG_get_node_stepped() const {
@@ -40,43 +46,13 @@ public:
     void LOG_reset_node_stepped() {
         node_stepped = 0;
     }
+    int LOG_get_elt_comparisons() const {
+        return elt_compared;
+    }
+    void LOG_reset_elt_comparisons() {
+        elt_compared = 0;
+    }
 #endif
-    private:
-
-    struct node {
-        T e;
-        slice s;
-        node(T e, slice s): e(e), s(s) {}
-        node(T&& e, slice&& s): e(e), s(s) {}
-    };
-
-
-    // A very core helper function. This is how we navigate
-    slice slice_preceeding(const T& e) {
-        slice result{max_height, nullptr};
-        slice* curr = &heads;
-        for (int i = max_height - 1; i >= 0; --i) {
-            // TODO revisit the >= in light of multiset.
-            if ((*curr)[i] == nullptr || (*curr)[i]->e >= e) {
-                result[i] = nullptr;
-            }
-            else {
-                auto candidate_node = (*curr)[i];
-                while (candidate_node->s[i] && candidate_node->s[i]->e < e) {
-                    curr = &(candidate_node->s);
-                    candidate_node = candidate_node->s[i];
-                    LOG_NODE_STEP;
-                }
-                result[i] = candidate_node;
-            }
-        }
-        return result;
-    }
-
-    int generate_height() {
-        return std::min(gen(),max_height-1) + 1;
-    }
-
     public:
     typedef T                                               key_type;
     typedef T                                               value_type;
@@ -91,6 +67,48 @@ public:
     typedef typename std::allocator_traits<Allocator>::const_pointer const_pointer;
     struct iterator;
     struct const_iterator;
+
+    private:
+
+    struct node {
+        T e;
+        slice s;
+        node(T e, slice s): e(e), s(s) {}
+        node(T&& e, slice&& s): e(e), s(s) {}
+    };
+
+
+    // A very core helper function. This is how we navigate
+    slice slice_preceeding(const T& e) {
+        slice result{max_height, nullptr};
+        slice* curr = &heads;
+
+        for (int i = max_height - 1; i >= 0; --i) {
+            // TODO revisit the >= in light of multiset.
+            if ((*curr)[i]) { LOG_ELT_COMPARISON; }
+            if ((*curr)[i] == nullptr || (*curr)[i]->e >= e) {
+                result[i] = nullptr;
+            }
+            else {
+                auto candidate_node = (*curr)[i];
+                if (candidate_node->s[i]) { LOG_ELT_COMPARISON; }
+                while (candidate_node->s[i] && candidate_node->s[i]->e < e) {
+                    curr = &(candidate_node->s);
+                    candidate_node = candidate_node->s[i];
+                    if (candidate_node->s[i]) { LOG_ELT_COMPARISON; }
+                    LOG_NODE_STEP;
+                }
+                result[i] = candidate_node;
+            }
+        }
+        return result;
+    }
+
+    int generate_height() {
+        return std::min(gen(),max_height-1) + 1;
+    }
+
+public:
     
     skip_list() = default;
     template<class ITER>
@@ -125,7 +143,7 @@ public:
 
     // TODO the parameter is not right.
     std::pair<iterator,bool> insert(const value_type& value) {
-        slice predecessors = slice_preceeding(value);
+        slice predecessors{slice_preceeding(value)};
         // TODO: watch for multiset functionality...
         // do we already have the element?
         if (predecessors[0] &&
@@ -163,7 +181,7 @@ public:
     }
 
     void erase(T e) {
-        slice to_stitch = slice_preceeding(e);
+        slice to_stitch{slice_preceeding(e)};
         node* to_del = nullptr;
         if (to_stitch[0] && to_stitch[0]->s[0]) {
             to_del = to_stitch[0]->s[0];

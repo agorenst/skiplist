@@ -4,7 +4,7 @@ verify_theoretical_properties: skiplist.h verify_theoretical_properties.cpp
 	clang++ verify_theoretical_properties.cpp -O2 -Wall -std=c++14 -o verify_theoretical_properties
 
 benchmarks_test: benchmarks_test.cpp skiplist.h
-	clang++ -g -DSKIPLIST_SET -Wall -O2 -std=c++14 benchmarks_test.cpp -o core_test
+	clang++ -g -Wall -O2 -std=c++14 benchmarks_test.cpp -o core_test
 
 basic_set_interface: basic_set_interface.cpp skiplist.h
 	clang++ -g -Wall -std=c++14 basic_set_interface.cpp -o basic_set_interface
