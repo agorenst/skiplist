@@ -1,5 +1,11 @@
-tests: skiplist_test
-#tests: basic_set_interface exhaustive_testing skiplist_test
+tests: verify_theoretical_properties benchmarks_test
+
+verify_theoretical_properties: skiplist.h verify_theoretical_properties.cpp
+	clang++ verify_theoretical_properties.cpp -O2 -Wall -std=c++14 -o verify_theoretical_properties
+
+benchmarks_test: benchmarks_test.cpp skiplist.h
+	clang++ -g -DSKIPLIST_SET -Wall -O2 -std=c++14 benchmarks_test.cpp -o skiplist_test
+	clang++ -g -DSTD_SET      -Wall -O2 -std=c++14 benchmarks_test.cpp -o rbtree_test
 
 basic_set_interface: basic_set_interface.cpp skiplist.h
 	clang++ -g -Wall -std=c++14 basic_set_interface.cpp -o basic_set_interface
@@ -8,4 +14,4 @@ exhaustive_testing: exhaustive_testing.cpp skiplist.h
 skiplist_test: skiplist_test.cpp skiplist.h
 	clang++ -O2 -g -Wall -std=c++14 skiplist_test.cpp -o skiplist_test
 clean:
-	rm skiplist_test basic_set_interface exhaustive_testing
+	rm skiplist_test basic_set_interface exhaustive_testing benchmarks_test rbtree_test skiplist_test verify_theoretical_properties

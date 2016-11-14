@@ -35,7 +35,7 @@ int test_bad() {
 }
 
 void performance_test() {
-    const int perm_size = 8;
+    const int perm_size = 9;
     vector<int> x(perm_size);
     skip_list<vector<int>, 12, test_good> l;
     for (int i = 0; i < perm_size; ++i) {
@@ -43,10 +43,10 @@ void performance_test() {
     }
     long long i = 0;
     do {
-        ++i;
-        l.LOG_reset_node_stepped();
+        //++i;
+        //l.LOG_reset_node_stepped();
         l.insert(x);
-        printf("%lld\t%d\n", i, l.LOG_get_node_stepped());
+        //printf("%lld\t%d\n", i, l.LOG_get_node_stepped());
     } while (next_permutation(begin(x), end(x)));
 //    for (auto&& x : l) {
 //        for (auto&& e : x) { cout << e << " "; }

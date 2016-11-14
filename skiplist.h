@@ -7,6 +7,12 @@
 #include <cstdio>
 #include <iterator>
 
+#ifdef LOGGING_INFO
+#define LOG_NODE_STEP LOG_node_stepped()
+#else
+#define LOG_NODE_STEP
+#endif
+
 //template<typename T, int max_height, std::function<int()> rnd>
 template<typename T, int max_height, int (*gen)(),
          class Compare = std::less<T>,
@@ -19,6 +25,7 @@ class skip_list {
     // the only field, and we initialize it.
     slice heads{max_height, nullptr};
 
+#ifdef LOGGING_INFO
     // Logging information to track performance.
     // Currently single-threaded...
     int node_stepped = 0;
@@ -33,6 +40,7 @@ public:
     void LOG_reset_node_stepped() {
         node_stepped = 0;
     }
+#endif
     private:
 
     struct node {
@@ -57,7 +65,7 @@ public:
                 while (candidate_node->s[i] && candidate_node->s[i]->e < e) {
                     curr = &(candidate_node->s);
                     candidate_node = candidate_node->s[i];
-                    LOG_node_stepped();
+                    LOG_NODE_STEP;
                 }
                 result[i] = candidate_node;
             }
@@ -142,6 +150,7 @@ public:
         }
         return {new_node, true};
     }
+
     template<typename InputIt>
     void insert(InputIt first, InputIt last) {
         for (; first != last; first++) {
