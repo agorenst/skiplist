@@ -73,10 +73,38 @@ TEST_CASE("empty()") {
     REQUIRE(l.empty());
 }
 
+TEST_CASE("operator=(const skip_list& that") {
+    skip_list<int, 4, empty> l;
+    skip_list<int, 4, empty> r;
+    l.insert(1);
+    r.insert(2);
+    l = r;
+    REQUIRE(l.size() == 1);
+    REQUIRE(l.find(2) != l.end());
+    REQUIRE(r == l);
+}
+
 TEST_CASE("insert(value)") {
     skip_list<int, 12, empty> l;
     l.insert(2);
     REQUIRE(l.find(2) != l.end());
+}
+TEST_CASE("insert(move)") {
+    skip_list<std::vector<int>, 12, empty> l;
+    std::vector<int> test_input{1,2,3,4,5,6,7};
+    std::vector<int> checker(test_input);
+    auto result = l.insert(std::move(test_input));
+    // Checking the basic results.
+    REQUIRE(std::get<1>(result));
+    REQUIRE(l.find(checker) != l.end());
+    REQUIRE(std::get<0>(result) == l.find(checker));
+}
+TEST_CASE("insert(begin, end)") {
+    skip_list<int, 12, empty> l;
+    int to_enter[] = {2,3,4,1,9,8};
+    l.insert(begin(to_enter), end(to_enter));
+    std::sort(begin(to_enter), end(to_enter));
+    REQUIRE(std::equal(begin(l), end(l), begin(to_enter), end(to_enter)));
 }
 
 TEST_CASE("find(const Key& key)") {
@@ -94,5 +122,20 @@ TEST_CASE("find(const Key& key)") {
     REQUIRE(r.find(2) != r.end());
     REQUIRE(*r.find(2) == 2);
     REQUIRE(r.size() == 1);
+}
+
+
+TEST_CASE("operator== function") {
+    skip_list<int, 12, empty> l;
+    skip_list<int, 12, empty> r;
+    l.insert(1);
+    l.insert(10);
+    l.insert(5);
+    r.insert(1);
+    r.insert(5);
+    r.insert(10);
+    REQUIRE(l == r);
+    r.insert(11);
+    REQUIRE(l != r);
 }
 

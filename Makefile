@@ -1,4 +1,4 @@
-tests: verify_theoretical_properties benchmarks_test
+tests: basic_set_interface exhaustive_testing
 
 verify_theoretical_properties: skiplist.h verify_theoretical_properties.cpp
 	clang++ verify_theoretical_properties.cpp -O2 -Wall -std=c++14 -o verify_theoretical_properties

@@ -126,9 +126,23 @@ public:
         clear();
     }
 
-    //skip_list& operator=(const skip_list& that);
-    //skip_list& operator=(skip_list&& that);
-    //skip_list& operator=(std::initializer_list<T> l);
+    skip_list& operator=(const skip_list& that) {
+        if (this == &that) { return *this; }
+        // for now this is very inefficient, but we'll do this.
+        this->clear();
+        this->insert(std::begin(that), std::end(that));
+        return *this;
+    }
+    skip_list& operator=(skip_list&& that) {
+        this->clear();
+        this->heads = that->heads;
+        // maybe remove this if not necessary.
+        that->heads = std::vector<pnode>{0,nullptr};
+    }
+    skip_list& operator=(std::initializer_list<T> l) {
+        this->clear();
+        insert(begin(l), end(l));
+    }
 
 
     void clear() {
@@ -141,6 +155,19 @@ public:
         std::fill(std::begin(heads), std::end(heads), nullptr);
     }
 
+    iterator insert(const_iterator hint, const value_type& value) {
+        auto iter_and_flag = insert(value);
+        return std::get<0>(iter_and_flag);
+    }
+    iterator insert(const_iterator hint, value_type&& value) {
+        auto iter_and_flag = insert(value);
+        return std::get<0>(iter_and_flag);
+    }
+
+    std::pair<iterator,bool> insert(value_type&& value) {
+        value_type v2(value);
+        return insert(v2);
+    }
     // TODO the parameter is not right.
     std::pair<iterator,bool> insert(const value_type& value) {
         slice predecessors{slice_preceeding(value)};
@@ -149,7 +176,7 @@ public:
         if (predecessors[0] &&
             predecessors[0]->s[0] &&
             predecessors[0]->s[0]->e == value) {
-            return {end(),false};
+            return {predecessors[0],false};
         }
 
         int new_height = generate_height();
@@ -176,9 +203,8 @@ public:
         }
     }
 
-    bool contains(T e) const {
-        return find(e) == nullptr;
-    }
+    // insert_return_type insert(node_type&& nh); // C++17
+    // iterator insert(const_iterator hint, node_type&& nh); // C++17
 
     void erase(T e) {
         slice to_stitch{slice_preceeding(e)};
@@ -201,7 +227,6 @@ public:
         }
     }
     
-
 // Definitely temporary, just getting things hooked up.
     struct const_iterator : public std::iterator<std::forward_iterator_tag,
                                     T,
@@ -215,6 +240,9 @@ public:
             if (mynode) { mynode = mynode->s[0]; }
             //printf("now: %p\n", mynode);
             return *this;
+        }
+        const_iterator& operator++(int) {
+            return ++(*this);
         }
         T operator*() { return mynode->e; }
         bool operator==(const const_iterator& that) const { return mynode == that.mynode; }
@@ -302,7 +330,7 @@ public:
             --i;
         }
         if (curr && curr->e == e) {
-            return iterator{curr};
+            return const_iterator{curr};
         }
         else {
             return end();
@@ -310,5 +338,75 @@ public:
     }
     //template<class K> iterator find(const K& k);
     //template<class K> const_iterator find(const K& k) const;
-
 };
+
+template<class Key, int max_height, int(*gen)(),
+         class Compare, class Alloc>
+bool operator==(const skip_list<Key, max_height, gen, Compare, Alloc>& lhs,
+                const skip_list<Key, max_height, gen, Compare, Alloc>& rhs) {
+    return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
+}
+
+template<class Key, int max_height, int(*gen)(),
+         class Compare, class Alloc>
+bool operator!=(const skip_list<Key, max_height, gen, Compare, Alloc>& lhs,
+                const skip_list<Key, max_height, gen, Compare, Alloc>& rhs) {
+    auto result = std::mismatch(begin(lhs), end(lhs), begin(rhs), end(rhs));
+    return std::get<0>(result) != lhs.end() || std::get<1>(result) != rhs.end();
+}
+template<class Key, int max_height, int(*gen)(),
+         class Compare, class Alloc>
+bool operator<(const skip_list<Key, max_height, gen, Compare, Alloc>& lhs,
+                const skip_list<Key, max_height,gen, Compare, Alloc>& rhs) {
+    auto result = std::mismatch(begin(lhs), end(lhs), begin(rhs), end(rhs));
+    auto first_iter = std::get<0>(result);
+    auto second_iter = std::get<1>(result);
+
+    // They're actually the same sequence!
+    if (first_iter == lhs.end() && second_iter == rhs.end()) {
+        return false;
+    }
+    // lhs is a "substring" of the rhs
+    if (first_iter == lhs.end()) {
+        return true;
+    }
+    // rhs is a substring of the lhs
+    if (second_iter == rhs.end()) {
+        return false;
+    }
+    return *first_iter < *second_iter;
+}
+template<class Key, int max_height, int(*gen)(),
+         class Compare, class Alloc>
+bool operator<=(const skip_list<Key, max_height, gen, Compare, Alloc>& lhs,
+                const skip_list<Key, max_height, gen, Compare, Alloc>& rhs) {
+    return !(lhs > rhs);
+}
+template<class Key, int max_height, int(*gen)(),
+         class Compare, class Alloc>
+bool operator>(const skip_list<Key, max_height,  gen, Compare, Alloc>& lhs,
+                const skip_list<Key, max_height, gen, Compare, Alloc>& rhs) {
+    auto result = std::mismatch(begin(lhs), end(lhs), begin(rhs), end(rhs));
+    auto first_iter = std::get<0>(result);
+    auto second_iter = std::get<1>(result);
+
+    // They're actually the same sequence!
+    if (first_iter == lhs.end() && second_iter == rhs.end()) {
+        return false;
+    }
+    // lhs is a "substring" of the rhs
+    if (first_iter == lhs.end()) {
+        return false;
+    }
+    // rhs is a substring of the lhs
+    if (second_iter == rhs.end()) {
+        return true;
+    }
+    return *first_iter > *second_iter;
+}
+template<class Key, int max_height, int(*gen)(),
+         class Compare, class Alloc>
+bool operator>=(const skip_list<Key, max_height, gen, Compare, Alloc>& lhs,
+                const skip_list<Key, max_height, gen, Compare, Alloc>& rhs) {
+    return !(lhs < rhs);
+}
