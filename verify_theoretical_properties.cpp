@@ -51,13 +51,18 @@ void count_asymptotic_behavior() {
     for (int i = 0; i < L; ++i) { x[i] = i; }
     skip_list<vector<int>, 32, good_height_generator> l;
     long long i = 0;
+    int max_comparisons = 0;
     do {
         ++i;
         l.LOG_reset_node_stepped();
+        l.LOG_reset_elt_comparisons();
         l.insert(x);
         auto c = l.LOG_get_node_stepped();
-        printf("%lld\t%d\t%f\n", i, c, log2(i));
+        auto d = l.LOG_get_elt_comparisons();
+        max_comparisons = max(max_comparisons, d);
+        printf("%lld\tsteps: %d\tcompares: %d\t%f\n", i, c, d, log2(i));
     } while (next_permutation(begin(x), end(x)));
+    printf("max comparisons: %d\n", max_comparisons);
 }
 
 // I'd expect this to ONLY be 1
@@ -68,6 +73,7 @@ void count_asymptotic_behavior_degenerate() {
     for (int i = 0; i < L; ++i) { x[L-(i+1)] = i; }
     skip_list<vector<int>, 32, good_height_generator> l;
     long long i = 0;
+    int max_comparisons = 0;
     do {
         ++i;
         l.LOG_reset_node_stepped();
@@ -75,11 +81,13 @@ void count_asymptotic_behavior_degenerate() {
         l.insert(x);
         auto c = l.LOG_get_node_stepped();
         auto d = l.LOG_get_elt_comparisons();
-        printf("%lld\t%d\t%d\t%f\n", i, c, d, log2(i));
+        max_comparisons = max(max_comparisons, d);
+        printf("%lld\tsteps: %d\tcompares: %d\t%f\n", i, c, d, log2(i));
     } while (prev_permutation(begin(x), end(x)));
+    printf("max comparisons: %d\n", max_comparisons);
 }
 
 int main() {
-    //count_asymptotic_behavior<9>();
-    count_asymptotic_behavior_degenerate<10>();
+    count_asymptotic_behavior<9>();
+    //count_asymptotic_behavior_degenerate<10>();
 }

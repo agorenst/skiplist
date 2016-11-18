@@ -7,6 +7,8 @@
 #include <climits>
 #include <set>
 
+// This test is *super* noisy on my machine.
+
 using namespace std;
 
 std::random_device rd;
@@ -100,11 +102,13 @@ int main() {
     typedef skip_list<vector<int>, 32, good_height_generator> skiplist_type;
     const int INPUT_SIZE=10;
 
+    cout << "baseline type: " << endl;
     auto t = measure<>::execution(always_add_larger_permutation<baseline_type, INPUT_SIZE>);
     cout << "call 1: " << t << endl;
     t = measure<>::execution(always_add_smaller_permutation<baseline_type, INPUT_SIZE>);
     cout << "call 2: " << t << endl;
 
+    cout << "skiplist type: " << endl;
     t = measure<>::execution(always_add_larger_permutation<skiplist_type, INPUT_SIZE>);
     cout << "call 1: " << t << endl;
     t = measure<>::execution(always_add_smaller_permutation<skiplist_type, INPUT_SIZE>);

@@ -14,6 +14,8 @@
 #define LOG_NODE_STEP
 #define LOG_ELT_COMPARISON
 #endif
+using namespace std;
+#include <iostream>
 
 //template<typename T, int max_height, std::function<int()> rnd>
 template<typename T, int max_height, int (*gen)(),
@@ -77,28 +79,32 @@ public:
         node(T&& e, slice&& s): e(e), s(s) {}
     };
 
-
     // A very core helper function. This is how we navigate
+    // the skiplist
     slice slice_preceeding(const T& e) {
         slice result{max_height, nullptr};
-        slice* curr = &heads;
+        node* prev_node = nullptr;
+        slice* prev_nexts = &heads;
 
         for (int i = max_height - 1; i >= 0; --i) {
-            // TODO revisit the >= in light of multiset.
-            if ((*curr)[i]) { LOG_ELT_COMPARISON; }
-            if ((*curr)[i] == nullptr || (*curr)[i]->e >= e) {
-                result[i] = nullptr;
+            if (!(*prev_nexts)[i]) {
+                result[i] = prev_node;
+            }
+            else if ((*prev_nexts)[i]->e >= e) {
+                LOG_ELT_COMPARISON;
+                result[i] = prev_node;
             }
             else {
-                auto candidate_node = (*curr)[i];
-                if (candidate_node->s[i]) { LOG_ELT_COMPARISON; }
-                while (candidate_node->s[i] && candidate_node->s[i]->e < e) {
-                    curr = &(candidate_node->s);
-                    candidate_node = candidate_node->s[i];
-                    if (candidate_node->s[i]) { LOG_ELT_COMPARISON; }
+                do {
+                    assert((*prev_nexts)[i]->e < e);
                     LOG_NODE_STEP;
-                }
-                result[i] = candidate_node;
+                    prev_node = (*prev_nexts)[i];
+                    prev_nexts = &(prev_node->s);
+                    if ((*prev_nexts)[i]) { LOG_ELT_COMPARISON; }
+                } while((*prev_nexts)[i] && (*prev_nexts)[i]->e < e);
+                if ((*prev_nexts)[i]) { LOG_ELT_COMPARISON; }
+
+                result[i] = prev_node;
             }
         }
         return result;
@@ -109,6 +115,36 @@ public:
     }
 
 public:
+
+    // Not really sure this is correct. Either way, only works
+    // for ints.
+    void dbg_print() {}
+    //    const int N = this->size();
+    //    for (int height = max_height; height >= 0; --height) {
+    //        if (heads[height]) {
+    //            printf("[]--");
+    //        }
+    //        else {
+    //            printf("X------");
+    //        }
+    //        node* n = heads[0];
+    //        while(n) {
+    //            if (n->s.size() > height && n->s[height]) {
+    //                printf("[%d->%d]--", n->e, n->s[height]->e);
+    //            }
+    //            else if (n->s.size() > height) {
+    //                printf("[%d]-----", n->e);
+    //            }
+    //            else {//if (heads[height]) {
+    //                printf("-------");
+    //            }
+    //            //else {
+    //            //}
+    //            n = n->s[0];
+    //        }
+    //        printf("X\n");
+    //    }
+    //}
     
     skip_list() = default;
     template<class ITER>
