@@ -1,8 +1,11 @@
 #define CATCH_CONFIG_MAIN
 #include "Catch/single_include/catch.hpp"
 
+#define LOGGING_INFO
+#define DEBUG_MODE
 #include "skiplist.h"
 #include <algorithm>
+#include <set>
 
 // Tests confirming that skip_list meets basic definition of a set.
 // Reference: http://en.cppreference.com/w/cpp/container/set/set
@@ -139,3 +142,74 @@ TEST_CASE("operator== function") {
     REQUIRE(l != r);
 }
 
+TEST_CASE("move constructor") {
+    skip_list<int, 12, empty> l;
+    skip_list<int, 12, empty> r;
+    l.insert(1);
+    r = std::move(l);
+    REQUIRE(r.find(1) != r.end());
+    r = std::move(r);
+    REQUIRE(r.find(1) != r.end());
+}
+
+#include <cstdio>
+int COPY_COUNTER;
+int MOVE_COUNTER;
+class noisy {
+    public:
+    int x;
+    noisy(const noisy& n): x(n.x+1) {
+        printf("copy constructor %d %d\n", n.x, x);
+        COPY_COUNTER++;
+    }
+    noisy(noisy&& n): x(n.x+1) {
+        printf("move constructor %d %d\n", n.x, x);
+        MOVE_COUNTER++;
+    }
+    noisy(): x(0) {
+        printf("default constructor %d\n", x);
+    }
+    explicit noisy(int x): x(x) {
+        printf("parameter constructor %d\n", x);
+    }
+    static void reset_state() {
+        MOVE_COUNTER = 0;
+        COPY_COUNTER = 0;
+    }
+    bool operator==(const noisy& n) const {
+        return x == n.x;
+    }
+    bool operator>=(const noisy& n) const {
+        return x >= n.x;
+    }
+    bool operator>(const noisy& n) const {
+        return x > n.x;
+    }
+    bool operator<(const noisy& n) const {
+        return x < n.x;
+    }
+};
+
+TEST_CASE("emplace test") {
+    std::set<noisy> s;
+    noisy big_noisy(10);
+    printf("Standard set reaction:\n");
+    printf("emplacing:\n");
+    s.emplace(7);
+    printf("inserting:\n");
+    s.insert(big_noisy);
+    printf("Now going to skiplist:\n");
+    printf("emplace test\n");
+    noisy tester(4);
+    noisy::reset_state();
+    skip_list<noisy, 12, empty> l;
+    l.emplace(4);
+    REQUIRE(MOVE_COUNTER == 0);
+    REQUIRE(COPY_COUNTER == 0);
+    noisy::reset_state();
+
+    l.insert(big_noisy);
+    REQUIRE(MOVE_COUNTER == 0);
+    REQUIRE(COPY_COUNTER == 1);
+    noisy::reset_state();
+};

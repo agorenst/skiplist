@@ -7,15 +7,26 @@
 #include <cstdio>
 #include <iterator>
 
+
+// Are we compiling in logging mode?
 #ifdef LOGGING_INFO
+#define LOG_CONDITIONAL(C, A) if (C) { A; }
+#define LOG_HEIGHT_TRAVERSED
 #define LOG_NODE_STEP LOG_node_stepped()
 #define LOG_ELT_COMPARISON LOG_elt_comparison()
 #else
+#define LOG_CONDITIONAL(C, A)
+#define LOG_HEIGHT_TRAVERSED
 #define LOG_NODE_STEP
 #define LOG_ELT_COMPARISON
 #endif
-using namespace std;
-#include <iostream>
+
+// Are we compiling in debug mode? (with asserts)
+#ifdef DEBUG_MODE
+#define DBG_PRINT(x) printf(x);
+#else
+#define DBG_PRINT(x)
+#endif
 
 //template<typename T, int max_height, std::function<int()> rnd>
 template<typename T, int max_height, int (*gen)(),
@@ -25,7 +36,10 @@ class skip_list {
     private:
     struct node;
     typedef node* pnode;
+
+    // TODO: Allocation
     typedef std::vector<pnode> slice;
+
     // the only field, and we initialize it.
     slice heads{max_height, nullptr};
 
@@ -35,26 +49,15 @@ class skip_list {
     int node_stepped = 0;
     int elt_compared = 0;
 
-    void LOG_node_stepped() {
-        node_stepped++;
-    }
-    void LOG_elt_comparison() {
-        elt_compared++;
-    }
+    void LOG_node_stepped() { node_stepped++; }
+    void LOG_elt_comparison() { elt_compared++; }
 public:
-    int LOG_get_node_stepped() const {
-        return node_stepped;
-    }
-    void LOG_reset_node_stepped() {
-        node_stepped = 0;
-    }
-    int LOG_get_elt_comparisons() const {
-        return elt_compared;
-    }
-    void LOG_reset_elt_comparisons() {
-        elt_compared = 0;
-    }
+    int LOG_get_node_stepped() const { return node_stepped; }
+    void LOG_reset_node_stepped() { node_stepped = 0; }
+    int LOG_get_elt_comparisons() const { return elt_compared; }
+    void LOG_reset_elt_comparisons() { elt_compared = 0; }
 #endif
+
     public:
     typedef T                                               key_type;
     typedef T                                               value_type;
@@ -73,20 +76,22 @@ public:
     private:
 
     struct node {
-        T e;
         slice s;
-        node(T e, slice s): e(e), s(s) {}
-        node(T&& e, slice&& s): e(e), s(s) {}
+        value_type e;
+        node(slice&& s, const value_type& e): s(s), e(e) {}
+        template<class... Args>
+        node(slice&& s, Args&&... args): s(s), e{std::forward<Args>(args)...} {}
     };
 
-    // A very core helper function. This is how we navigate
-    // the skiplist
+    // This is the core lookup routine: find the "slice"
+    // that would be the predecessors for element e.
     slice slice_preceeding(const T& e) {
         slice result{max_height, nullptr};
         node* prev_node = nullptr;
         slice* prev_nexts = &heads;
 
         for (int i = max_height - 1; i >= 0; --i) {
+            LOG_HEIGHT_TRAVERSED
             if (!(*prev_nexts)[i]) {
                 result[i] = prev_node;
             }
@@ -100,9 +105,9 @@ public:
                     LOG_NODE_STEP;
                     prev_node = (*prev_nexts)[i];
                     prev_nexts = &(prev_node->s);
-                    if ((*prev_nexts)[i]) { LOG_ELT_COMPARISON; }
+                    LOG_CONDITIONAL((*prev_nexts)[i], LOG_ELT_COMPARISON);
                 } while((*prev_nexts)[i] && (*prev_nexts)[i]->e < e);
-                if ((*prev_nexts)[i]) { LOG_ELT_COMPARISON; }
+                LOG_CONDITIONAL((*prev_nexts)[i], LOG_ELT_COMPARISON);
 
                 result[i] = prev_node;
             }
@@ -110,12 +115,11 @@ public:
         return result;
     }
 
-    int generate_height() {
+    int generate_height() const {
         return std::min(gen(),max_height-1) + 1;
     }
 
 public:
-
     // Not really sure this is correct. Either way, only works
     // for ints.
     void dbg_print() {}
@@ -147,17 +151,20 @@ public:
     //}
     
     skip_list() = default;
+
     template<class ITER>
     skip_list(ITER start, ITER finish) {
         for (; start != finish; ++start) {
             insert(*start);
         }
     }
+
     skip_list(const std::initializer_list<T>& l) {
         for (auto&& x : l) {
             insert(x);
         }
     }
+
     ~skip_list() {
         clear();
     }
@@ -170,17 +177,20 @@ public:
         return *this;
     }
     skip_list& operator=(skip_list&& that) {
+        // is that right? I don't think this is possible...?
+        if (this == &that) { return *this; }
         this->clear();
-        this->heads = that->heads;
+        this->heads = that.heads;
         // maybe remove this if not necessary.
-        that->heads = std::vector<pnode>{0,nullptr};
+        that.heads = std::vector<pnode>{0,nullptr};
+        return *this;
     }
     skip_list& operator=(std::initializer_list<T> l) {
         this->clear();
         insert(begin(l), end(l));
     }
 
-
+    // Very basic destructor.
     void clear() {
         node* curr = heads[0];
         while (curr) {
@@ -200,25 +210,14 @@ public:
         return std::get<0>(iter_and_flag);
     }
 
+    // TODO: we're not really doing a good move construction.
     std::pair<iterator,bool> insert(value_type&& value) {
         value_type v2(value);
         return insert(v2);
     }
-    // TODO the parameter is not right.
-    std::pair<iterator,bool> insert(const value_type& value) {
-        slice predecessors{slice_preceeding(value)};
-        // TODO: watch for multiset functionality...
-        // do we already have the element?
-        if (predecessors[0] &&
-            predecessors[0]->s[0] &&
-            predecessors[0]->s[0]->e == value) {
-            return {predecessors[0],false};
-        }
 
-        int new_height = generate_height();
-        slice new_slice(new_height, nullptr);
-        auto new_node = new node{value, new_slice};
-
+    void stitch_up_node(const slice& predecessors, node* new_node) {
+        const int new_height = new_node->s.size();
         for (int i = 0; i < new_height; ++i) {
             if (predecessors[i] == nullptr) {
                 new_node->s[i] = heads[i];
@@ -229,6 +228,34 @@ public:
                 predecessors[i]->s[i] = new_node;
             }
         }
+    }
+
+    bool preds_have_e(const slice& predecessors, const value_type& value) const {
+        return predecessors[0] &&
+               predecessors[0]->s[0] &&
+               predecessors[0]->s[0]->e == value;
+    }
+
+    slice generate_slice() const {
+        return slice{(size_t)generate_height(), nullptr};
+    }
+
+    // TODO: have to use COMPARE, not operator<
+    std::pair<iterator,bool> insert(const value_type& value) {
+        slice predecessors{slice_preceeding(value)};
+        // TODO: watch for multiset functionality...
+        // do we already have the element?
+        if (preds_have_e(predecessors, value)) {
+            return {predecessors[0], false};
+        }
+
+        int new_height = generate_height();
+        slice new_slice(new_height, nullptr);
+        DBG_PRINT("insert(const value_type&): constructing new node\n");
+        auto new_node = new node{std::move(new_slice), value};
+        DBG_PRINT("insert(const value_type&): done constructing node\n");
+
+        stitch_up_node(predecessors, new_node);
         return {new_node, true};
     }
 
@@ -237,6 +264,25 @@ public:
         for (; first != last; first++) {
             insert(*first);
         }
+    }
+
+    template<class... Args>
+    std::pair<iterator, bool> emplace(Args&&... args) {
+        // We make the node first
+        slice new_nexts{(size_t) generate_height(), nullptr};
+        DBG_PRINT("emplace(args): constructing new node\n");
+        auto new_node = new node{std::move(new_nexts), args...};// std::forward<Args>(args)...,
+                                 //std::move(new_nexts)};
+        DBG_PRINT("emplace(args): done constructing node\n");
+
+        slice predecessors{slice_preceeding(new_node->e)};
+        if (preds_have_e(predecessors, new_node->e)) {
+            delete new_node;
+            return {predecessors[0], false};
+        }
+
+        stitch_up_node(predecessors, new_node);
+        return {new_node, true};
     }
 
     // insert_return_type insert(node_type&& nh); // C++17
