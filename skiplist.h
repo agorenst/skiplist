@@ -37,8 +37,8 @@ class skip_list {
     struct node;
     typedef node* pnode;
 
-    // TODO: Allocation
-    typedef std::vector<pnode> slice;
+    // TODO: Allocation -- maybe put a pool in front?
+    typedef std::vector<pnode, Allocator> slice;
 
     // the only field, and we initialize it.
     slice heads{max_height, nullptr};
@@ -85,6 +85,7 @@ public:
 
     // This is the core lookup routine: find the "slice"
     // that would be the predecessors for element e.
+    // TODO: have to use COMPARE, not operator<
     slice slice_preceeding(const T& e) {
         slice result{max_height, nullptr};
         node* prev_node = nullptr;
@@ -182,7 +183,8 @@ public:
         this->clear();
         this->heads = that.heads;
         // maybe remove this if not necessary.
-        that.heads = std::vector<pnode>{0,nullptr};
+        // TODO: Figure out what's supposed to happen here. UB?
+        //that.heads = std::vector<pnode>{0,nullptr};
         return *this;
     }
     skip_list& operator=(std::initializer_list<T> l) {
@@ -210,11 +212,6 @@ public:
         return std::get<0>(iter_and_flag);
     }
 
-    // TODO: we're not really doing a good move construction.
-    std::pair<iterator,bool> insert(value_type&& value) {
-        value_type v2(value);
-        return insert(v2);
-    }
 
     void stitch_up_node(const slice& predecessors, node* new_node) {
         const int new_height = new_node->s.size();
@@ -230,6 +227,7 @@ public:
         }
     }
 
+    // TODO: have to use COMPARE, not operator<
     bool preds_have_e(const slice& predecessors, const value_type& value) const {
         return predecessors[0] &&
                predecessors[0]->s[0] &&
@@ -240,7 +238,24 @@ public:
         return slice{(size_t)generate_height(), nullptr};
     }
 
-    // TODO: have to use COMPARE, not operator<
+    // TODO: Share code between the different inserts and emplace.
+    std::pair<iterator,bool> insert(value_type&& value) {
+        slice predecessors{slice_preceeding(value)};
+        // TODO: watch for multiset functionality...
+        // do we already have the element?
+        if (preds_have_e(predecessors, value)) {
+            return {predecessors[0], false};
+        }
+        int new_height = generate_height();
+        slice new_slice(new_height, nullptr);
+        DBG_PRINT("insert(value_type&&): constructing new node\n");
+        auto new_node = new node{std::move(new_slice), std::move(value)};
+        DBG_PRINT("insert(value_type&&): done constructing node\n");
+
+        stitch_up_node(predecessors, new_node);
+        return {new_node, true};
+    }
+
     std::pair<iterator,bool> insert(const value_type& value) {
         slice predecessors{slice_preceeding(value)};
         // TODO: watch for multiset functionality...
@@ -259,20 +274,12 @@ public:
         return {new_node, true};
     }
 
-    template<typename InputIt>
-    void insert(InputIt first, InputIt last) {
-        for (; first != last; first++) {
-            insert(*first);
-        }
-    }
-
     template<class... Args>
     std::pair<iterator, bool> emplace(Args&&... args) {
         // We make the node first
         slice new_nexts{(size_t) generate_height(), nullptr};
         DBG_PRINT("emplace(args): constructing new node\n");
-        auto new_node = new node{std::move(new_nexts), args...};// std::forward<Args>(args)...,
-                                 //std::move(new_nexts)};
+        auto new_node = new node{std::move(new_nexts), args...};
         DBG_PRINT("emplace(args): done constructing node\n");
 
         slice predecessors{slice_preceeding(new_node->e)};
@@ -284,6 +291,14 @@ public:
         stitch_up_node(predecessors, new_node);
         return {new_node, true};
     }
+
+    template<typename InputIt>
+    void insert(InputIt first, InputIt last) {
+        for (; first != last; first++) {
+            insert(*first);
+        }
+    }
+
 
     // insert_return_type insert(node_type&& nh); // C++17
     // iterator insert(const_iterator hint, node_type&& nh); // C++17
@@ -376,6 +391,8 @@ public:
     // Basic find operation. Returns an iterator containing
     // the node with the value equal to e, or end()
     // TODO: Can probably clean up the looping/conditional logic.
+    // TODO: Can't I share code by constructing a const_iterator
+    // from iterator?
     iterator find(const T& e) {
         int i = max_height - 1;
 

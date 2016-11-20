@@ -190,7 +190,42 @@ class noisy {
     }
 };
 
-TEST_CASE("emplace test") {
+TEST_CASE("emplace(Args&&... args)") {
+    noisy::reset_state();
+    skip_list<noisy, 12, empty> l;
+    l.emplace(4);
+    REQUIRE(MOVE_COUNTER == 0);
+    REQUIRE(COPY_COUNTER == 0);
+    auto has_four = l.find(noisy(4));
+    REQUIRE(has_four != l.end());
+    REQUIRE((*has_four) == noisy(4));
+    noisy::reset_state();
+}
+
+TEST_CASE("insert(value_type& v) only copies once") {
+    noisy::reset_state();
+    noisy tester(4);
+    skip_list<noisy, 12, empty> l;
+    l.insert(tester);
+    REQUIRE(MOVE_COUNTER == 0);
+    REQUIRE(COPY_COUNTER == 1);
+    noisy::reset_state();
+}
+
+TEST_CASE("insert(value_type&&) move-constructs once, no copies") {
+    printf("Starting RVO test...");
+    noisy tester(4);
+    skip_list<noisy, 12, empty> l;
+    noisy::reset_state();
+    l.insert(std::move(tester));
+    REQUIRE(MOVE_COUNTER == 1);
+    REQUIRE(COPY_COUNTER == 0);
+    noisy::reset_state();
+}
+
+// This was just an older test that I used to explore
+// emplace vs insert and so on...
+TEST_CASE("emplace(Args&&... args) bigger test") {
     std::set<noisy> s;
     noisy big_noisy(10);
     printf("Standard set reaction:\n");
@@ -213,3 +248,10 @@ TEST_CASE("emplace test") {
     REQUIRE(COPY_COUNTER == 1);
     noisy::reset_state();
 };
+
+// More things to test:
+// 1) Using template parameters (compare, allocators)
+// 1a) Memory usage: make sure we're using the allocators in the way we expect.
+// 2) Comparison operators
+// 3) Exception safety (what's supposed to happen in OOM?)
+// 4) Iterator const-ness and the like.
