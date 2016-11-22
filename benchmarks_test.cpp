@@ -7,6 +7,8 @@
 #include <climits>
 #include <set>
 
+#include "./../enumeration/permutation.h"
+
 // This test is *super* noisy on my machine.
 
 using namespace std;
@@ -94,23 +96,42 @@ void always_add_smaller_permutation() {
 }
 
 template<typename C, int L>
+void insert_random_permutations() {
+    C container;
+    std::uniform_int_distribution<> perm_chooser(0, fact[L]-1);
+    for (int i = 0; i < 1000000; ++i) {
+        auto value = i_to_perm(L, perm_chooser(gen));
+        container.insert(value);
+    }
+    auto first_elt = *begin(container);
+    for_each(begin(first_elt), end(first_elt), [](int x) {
+        cout << x << " ";
+    });
+    cout << endl;
+}
+
+template<typename C, int L>
 void increasing_permutation_insert() {
 }
 
 int main() {
     typedef std::set<vector<int>> baseline_type;
     typedef skip_list<vector<int>, 32, good_height_generator> skiplist_type;
-    const int INPUT_SIZE=10;
+    const int INPUT_SIZE=4;
 
     cout << "baseline type: " << endl;
-    auto t = measure<>::execution(always_add_larger_permutation<baseline_type, INPUT_SIZE>);
-    cout << "call 1: " << t << endl;
-    t = measure<>::execution(always_add_smaller_permutation<baseline_type, INPUT_SIZE>);
-    cout << "call 2: " << t << endl;
+    //auto t = measure<>::execution(always_add_larger_permutation<baseline_type, INPUT_SIZE>);
+    //cout << "call 1: " << t << endl;
+    //t = measure<>::execution(always_add_smaller_permutation<baseline_type, INPUT_SIZE>);
+    //cout << "call 2: " << t << endl;
+    auto t = measure<>::execution(insert_random_permutations<baseline_type, INPUT_SIZE>);
+    cout << "call 3: " << t << endl;
 
     cout << "skiplist type: " << endl;
-    t = measure<>::execution(always_add_larger_permutation<skiplist_type, INPUT_SIZE>);
-    cout << "call 1: " << t << endl;
-    t = measure<>::execution(always_add_smaller_permutation<skiplist_type, INPUT_SIZE>);
-    cout << "call 2: " << t << endl;
+    //t = measure<>::execution(always_add_larger_permutation<skiplist_type, INPUT_SIZE>);
+    //cout << "call 1: " << t << endl;
+    //t = measure<>::execution(always_add_smaller_permutation<skiplist_type, INPUT_SIZE>);
+    //cout << "call 2: " << t << endl;
+    t = measure<>::execution(insert_random_permutations<skiplist_type, INPUT_SIZE>);
+    cout << "call 3: " << t << endl;
 }

@@ -1,4 +1,9 @@
-tests: benchmarks_test basic_set_interface exhaustive_testing
+tests: error_tests
+
+random_tests: random_tests.cpp skiplist.h
+	clang++ -g -Wall -O3 -std=c++14 random_tests.cpp -o random_tests
+error_tests: error_tests.cpp skiplist.h
+	clang++ -g -Wall -O0 -std=c++14 error_tests.cpp -o error_tests
 
 basic_performance_checks: basic_performance_checks.cpp
 	clang++ -g -Wall -O2 -std=c++14 basic_performance_checks.cpp -o basic_performance_checks
@@ -16,4 +21,4 @@ exhaustive_testing: exhaustive_testing.cpp skiplist.h
 skiplist_test: skiplist_test.cpp skiplist.h
 	clang++ -O2 -g -Wall -std=c++14 skiplist_test.cpp -o skiplist_test
 clean:
-	rm skiplist_test basic_set_interface exhaustive_testing benchmarks_test rbtree_test skiplist_test verify_theoretical_properties core_test basic_performance_checks
+	rm skiplist_test basic_set_interface exhaustive_testing benchmarks_test rbtree_test skiplist_test verify_theoretical_properties core_test basic_performance_checks error_tests random_tests
