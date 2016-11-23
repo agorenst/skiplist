@@ -37,12 +37,26 @@ int good_height_generator() {
 
 int empty() { return 0; }
 
+long long logging_comparer_counter_1 = 0;
+struct logging_comparer_1 {
+    bool operator()(const int& a, const int& b) {
+        logging_comparer_counter_1++;
+        return a < b;
+    }
+};
+long long logging_comparer_counter_2 = 0;
+struct logging_comparer_2 {
+    bool operator()(const int& a, const int& b) {
+        logging_comparer_counter_2++;
+        return a < b;
+    }
+};
 
 TEST_CASE("Random set of insertions and deletions.") {
     const int N = 17;
     const int M = 17;
-    skip_list<int, 32, good_height_generator> l;
-    set<int> s;
+    skip_list<int, 32, good_height_generator, logging_comparer_1> l;
+    set<int,logging_comparer_2> s;
     for (int i = 0; i < 1000000; ++i) {
         int value = dis(gen) % N;
         int height = good_height_generator()+1;
@@ -59,5 +73,7 @@ TEST_CASE("Random set of insertions and deletions.") {
         }
         REQUIRE(equal(begin(l), end(l), begin(s), end(s)));
     }
+    cout << "Logging comparer for std::set: " << logging_comparer_counter_2 << endl;
+    cout << "Logging comparer for skiplist: " << logging_comparer_counter_1 << endl;
 }
 

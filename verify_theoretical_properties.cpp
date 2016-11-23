@@ -5,6 +5,7 @@
 #include <random>
 #include <iostream>
 #include <bitset>
+#include <set>
 
 #define LOGGING_INFO
 #include "skiplist.h"
@@ -43,7 +44,6 @@ void verify_ntz() {
         print_binary(i); cout << "\t" << ntz(i) << endl;
     }
 }
-
 
 template<int L>
 void count_asymptotic_behavior() {
@@ -87,7 +87,30 @@ void count_asymptotic_behavior_degenerate() {
     printf("max comparisons: %d\n", max_comparisons);
 }
 
+
+long long logging_comparer_counter = 0;
+struct logging_comparer {
+    bool operator()(const int& a, const int& b) {
+        logging_comparer_counter++;
+        return a < b;
+    }
+};
+
+void measure_compare_counts() {
+    std::set<int, logging_comparer> s;
+    for (int i = 0; i < 1000000; ++i) {
+        s.insert(i);
+    }
+    cout << "Logging comparer for std::set: " << logging_comparer_counter << endl;
+    logging_comparer_counter = 0;
+    skip_list<int,32,good_height_generator,logging_comparer> l;
+    for (int i = 0; i < 1000000; ++i) {
+        l.insert(i);
+    }
+    cout << "Logging comparer for skiplist: " << logging_comparer_counter << endl;
+}
+
 int main() {
-    count_asymptotic_behavior<9>();
+    measure_compare_counts();
     //count_asymptotic_behavior_degenerate<10>();
 }

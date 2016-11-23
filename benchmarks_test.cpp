@@ -99,7 +99,7 @@ template<typename C, int L>
 void insert_random_permutations() {
     C container;
     std::uniform_int_distribution<> perm_chooser(0, fact[L]-1);
-    for (int i = 0; i < 1000000; ++i) {
+    for (int i = 0; i < 10000000; ++i) {
         auto value = i_to_perm(L, perm_chooser(gen));
         container.insert(value);
     }
@@ -117,21 +117,21 @@ void increasing_permutation_insert() {
 int main() {
     typedef std::set<vector<int>> baseline_type;
     typedef skip_list<vector<int>, 32, good_height_generator> skiplist_type;
-    const int INPUT_SIZE=4;
+    const int INPUT_SIZE=6;
 
     cout << "baseline type: " << endl;
     //auto t = measure<>::execution(always_add_larger_permutation<baseline_type, INPUT_SIZE>);
     //cout << "call 1: " << t << endl;
     //t = measure<>::execution(always_add_smaller_permutation<baseline_type, INPUT_SIZE>);
     //cout << "call 2: " << t << endl;
-    auto t = measure<>::execution(insert_random_permutations<baseline_type, INPUT_SIZE>);
-    cout << "call 3: " << t << endl;
+   // auto t = measure<>::execution(insert_random_permutations<baseline_type, INPUT_SIZE>);
+   // cout << "call 3: " << t << endl;
 
     cout << "skiplist type: " << endl;
     //t = measure<>::execution(always_add_larger_permutation<skiplist_type, INPUT_SIZE>);
     //cout << "call 1: " << t << endl;
     //t = measure<>::execution(always_add_smaller_permutation<skiplist_type, INPUT_SIZE>);
     //cout << "call 2: " << t << endl;
-    t = measure<>::execution(insert_random_permutations<skiplist_type, INPUT_SIZE>);
+    auto t = measure<>::execution(insert_random_permutations<skiplist_type, INPUT_SIZE>);
     cout << "call 3: " << t << endl;
 }

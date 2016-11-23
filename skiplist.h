@@ -33,7 +33,6 @@
 #include <iostream>
 using namespace std;
 
-//template<typename T, int max_height, std::function<int()> rnd>
 template<typename T, int max_height, int (*gen)(),
          class Compare = std::less<T>,
          class Allocator = std::allocator<T>>
@@ -90,8 +89,8 @@ public:
 
     // This is the core lookup routine: find the "slice"
     // that would be the predecessors for element e.
-    // TODO: have to use COMPARE, not operator<
     slice slice_preceeding(const T& e) {
+        value_compare comp;
         slice result{max_height, nullptr};
         node* prev_node = nullptr;
         slice* prev_nexts = &heads;
@@ -101,28 +100,23 @@ public:
             if (!((*prev_nexts)[i])) {
                 result[i] = prev_node;
             }
-            else if ((*prev_nexts)[i]->e >= e) {
+            else if (!comp((*prev_nexts)[i]->e, e)) {
                 LOG_ELT_COMPARISON;
                 result[i] = prev_node;
             }
             else {
                 do {
-                    ASSERT((*prev_nexts)[i]->e < e);
+                    ASSERT(comp((*prev_nexts)[i]->e, e));
                     LOG_NODE_STEP;
                     prev_node = (*prev_nexts)[i];
                     prev_nexts = &(prev_node->s);
                     LOG_CONDITIONAL((*prev_nexts)[i], LOG_ELT_COMPARISON);
-                } while((*prev_nexts)[i] && (*prev_nexts)[i]->e < e);
+                } while((*prev_nexts)[i] && comp((*prev_nexts)[i]->e, e));
                 LOG_CONDITIONAL((*prev_nexts)[i], LOG_ELT_COMPARISON);
 
                 result[i] = prev_node;
             }
         }
-        //for_each(std::begin(result), std::end(result), [](node* n) {
-        //    if (n) { cout << n->e << " "; }
-        //    else { cout << "-" << " "; }
-        //});
-        //cout << endl;
         return result;
     }
 
@@ -230,24 +224,27 @@ public:
         DBG_PRINT("new_height: %d\n", new_height);
         for (int i = 0; i < new_height; ++i) {
             if (predecessors[i] == nullptr) {
-                //cout << "pointing " << new_node->e << " to " << (heads[i] ? heads[i]->e : -1) << endl;
                 new_node->s[i] = heads[i];
                 heads[i] = new_node;
             }
             else {
-                //cout << "pointing " << new_node->e << " to " << (predecessors[i] ? predecessors[i]->e : -1) << endl;
                 new_node->s[i] = predecessors[i]->s[i];
                 predecessors[i]->s[i] = new_node;
             }
         }
     }
 
-    // TODO: have to use COMPARE, not operator<
+    bool are_equal(const value_type& v1, const value_type& v2) const {
+        Compare comp;
+        return !comp(v1, v2) && !comp(v2, v1);
+    }
+
     bool preds_have_e(const slice& predecessors, const value_type& value) const {
         return (predecessors[0] &&
                predecessors[0]->s[0] &&
-               predecessors[0]->s[0]->e == value) ||
-               (!predecessors[0] && heads[0] && heads[0]->e == value);
+               are_equal(predecessors[0]->s[0]->e, value))
+                ||
+               (!predecessors[0] && heads[0] && are_equal(heads[0]->e, value));
     }
 
     slice generate_slice() const {
@@ -346,17 +343,17 @@ public:
     // iterator insert(const_iterator hint, node_type&& nh); // C++17
 
     void erase(const T& e) {
+        value_compare comp;
         slice to_stitch{slice_preceeding(e)};
         node* to_del = nullptr;
         // the element is smaller than anything we actually have.
         if (!to_stitch[0] &&
-            (!heads[0] || heads[0]->e != e)) {
-            ASSERT(heads[0]->e > e);
+            (!heads[0] || !are_equal(e, heads[0]->e))) {
+            ASSERT(comp(heads[0]->e, e));
             return;
         }
         // The element is the first in the set:
-        else if (heads[0] &&
-            heads[0]->e == e) {
+        else if (heads[0] && are_equal(heads[0]->e, e)) {
             to_del = heads[0];
 
             for (int i = 0; i < max_height; ++i) {
@@ -370,7 +367,7 @@ public:
         // the element exists...
         else if (to_stitch[0] &&
             to_stitch[0]->s[0] &&
-            to_stitch[0]->s[0]->e == e) {
+            are_equal(to_stitch[0]->s[0]->e, e)) {
             to_del = to_stitch[0]->s[0];
             for (int i = 0; i < max_height; ++i) {
                 if (to_stitch[i] && to_stitch[i]->s[i] == to_del) {
@@ -383,41 +380,7 @@ public:
             delete to_del;
             return;
         }
-        // otherwise... return
         return;
-        //if (to_stitch[0] &&
-        //    to_stitch[0]->s[0] &&
-        //    to_stitch[0]->s[0]->e == e) {
-
-        //    to_del = to_stitch[0]->s[0];
-        //    for (int i = max_height - 1; i >= 0; --i) {
-        //        if (to_stitch[i] == to_del) {
-        //            ASSERT(to_stitch[i]->s[i]->e == e);
-        //            to_stitch[i]->s[i] = to_stitch[i]->s[i]->s[i];
-        //        }
-        //    }
-        //}
-        //slice to_stitch{slice_preceeding(e)};
-        //node* to_del = nullptr;
-        //if (to_stitch[0] && to_stitch[0]->s[0] && to_stitch[0]->s[0]->e == e) {
-        //    to_del = to_stitch[0]->s[0];
-        //}
-        //for (int i = max_height - 1; i >= 0; --i) {
-        //    if (to_stitch[i]) {
-        //        ASSERT(to_stitch[i]->s[i]->e == e);
-        //        to_stitch[i]->s[i] = to_stitch[i]->s[i]->s[i];
-        //    }
-        //    else if (heads[i] && heads[i]->e == e) {
-        //        fprintf(stderr, "Restitching: %d %d %d\n", heads[i], heads[i]->e, e);
-        //        fflush(stderr);
-        //        ASSERT(heads[i]->s.size() >= i);
-        //        if (!to_del) { to_del = heads[i]; }
-        //        heads[i] = heads[i]->s[i];
-        //    }
-        //}
-        //if (to_del) {
-        //    delete to_del;
-        //}
     }
     
 // Definitely temporary, just getting things hooked up.
@@ -490,6 +453,7 @@ public:
     // TODO: Can't I share code by constructing a const_iterator
     // from iterator?
     iterator find(const T& e) {
+        value_compare comp;
         int i = max_height - 1;
 
         // find the highest non-null element.
@@ -498,12 +462,12 @@ public:
         auto curr = heads[i];
         ASSERT(curr);
         while (i > 0) {
-            while (curr && curr->e > e) {
+            while (curr && comp(e, curr->e)) {
                 curr = curr->s[i];
             }
             --i;
         }
-        if (curr && curr->e == e) {
+        if (curr && are_equal(curr->e,e)) {
             return iterator{curr};
         }
         else {
@@ -511,6 +475,7 @@ public:
         }
     }
     const_iterator find(const T& e) const {
+        value_compare comp;
         int i = max_height - 1;
 
         // find the highest non-null element.
@@ -519,12 +484,12 @@ public:
         auto curr = heads[i];
         ASSERT(curr);
         while (i > 0) {
-            while (curr && curr->e > e) {
+            while (curr && comp(e, curr->e)) {
                 curr = curr->s[i];
             }
             --i;
         }
-        if (curr && curr->e == e) {
+        if (curr && are_equal(curr->e,e)) {
             return const_iterator{curr};
         }
         else {

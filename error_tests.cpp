@@ -100,3 +100,28 @@ TEST_CASE("new segfault found via random_test") {
     l.erase(7);
     l.insert(12,2);
 }
+
+
+// I tried to be clever and streamline some comparisons, and
+// I got caught in negating the <, <> vs equality, etc.
+// A simple error in "erase", yet again...
+TEST_CASE("assertion failure after changing to Compare") {
+    skip_list<int, 32, good_height_generator> l;
+    set<int> s;
+    int i = 0;
+    int latest_error[] = { 0, 2, 1,     0, 1, -1,     -999};
+    while(latest_error[i] != -999) {
+        int value = latest_error[i++];
+        int height = latest_error[i++];
+        int to_insert = latest_error[i++];
+        if (to_insert == 1) {
+            l.insert(value, height);
+            s.insert(value);
+        }
+        else {
+            l.erase(value);
+            s.erase(value);
+        }
+        REQUIRE(equal(begin(l), end(l), begin(s), end(s)));
+    }
+}
