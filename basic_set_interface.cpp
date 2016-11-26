@@ -146,9 +146,9 @@ TEST_CASE("move constructor") {
     skip_list<int, 12, empty> l;
     skip_list<int, 12, empty> r;
     l.insert(1);
+    l.dbg_print();
+    r.dbg_print();
     r = std::move(l);
-    REQUIRE(r.find(1) != r.end());
-    r = std::move(r);
     REQUIRE(r.find(1) != r.end());
 }
 
@@ -188,7 +188,17 @@ class noisy {
     bool operator<(const noisy& n) const {
         return x < n.x;
     }
+    operator int() { return x; }
 };
+
+// If the iterator returns a copy, then it would
+// invok ethe copy cosntructor and it's x would be 5
+TEST_CASE("make sure iterator returns reference") {
+    skip_list<noisy, 12, empty> l;
+    l.emplace(4);
+    auto iter = l.find(noisy(4));
+    REQUIRE((*iter).x == 4);
+}
 
 TEST_CASE("emplace(Args&&... args)") {
     noisy::reset_state();
@@ -198,6 +208,7 @@ TEST_CASE("emplace(Args&&... args)") {
     REQUIRE(COPY_COUNTER == 0);
     auto has_four = l.find(noisy(4));
     REQUIRE(has_four != l.end());
+    printf("has_four value: %d\n", (*has_four).x);
     REQUIRE((*has_four) == noisy(4));
     noisy::reset_state();
 }

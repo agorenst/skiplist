@@ -51,10 +51,10 @@ class skip_list {
     // Logging information to track performance.
     // Currently single-threaded...
     int node_stepped = 0;
-    int elt_compared = 0;
+    mutable int elt_compared = 0;
 
     void LOG_node_stepped() { node_stepped++; }
-    void LOG_elt_comparison() { elt_compared++; }
+    void LOG_elt_comparison() const { elt_compared++; }
 public:
     int LOG_get_node_stepped() const { return node_stepped; }
     void LOG_reset_node_stepped() { node_stepped = 0; }
@@ -78,6 +78,13 @@ public:
     struct const_iterator;
 
     private:
+    bool compare(const value_type& t1, const value_type& t2) const {
+        // TODO: figure out if comp is supposed to be a field, or have
+        // other restrictions.
+        value_compare comp;
+        LOG_ELT_COMPARISON;
+        return comp(t1, t2);
+    }
 
     struct node {
         slice s;
@@ -87,36 +94,52 @@ public:
         node(slice s, Args&&... args): s(s), e{std::forward<Args>(args)...} {}
     };
 
+    template<typename Iter>
+    int find_i_to_fwd(const T& E, Iter first, Iter last) {
+        return std::upper_bound(first, last, E, [this](const T& e, node* n) {
+            return !(n && compare(n->e, e));
+        }) - first;
+    }
+
     // This is the core lookup routine: find the "slice"
     // that would be the predecessors for element e.
-    slice slice_preceeding(const T& e) {
-        value_compare comp;
-        slice result{max_height, nullptr};
+    slice slice_preceeding(const T& e, const size_type height = max_height) {
+        slice result{height, nullptr};
+        //slice result_test{height, nullptr};
         node* prev_node = nullptr;
         slice* prev_nexts = &heads;
-
-        for (int i = max_height - 1; i >= 0; --i) {
-            LOG_HEIGHT_TRAVERSED
-            if (!((*prev_nexts)[i])) {
-                result[i] = prev_node;
+        //auto first_interesting = find_i_to_fwd(e,
+        //        prev_nexts->begin(),
+        //        (prev_nexts->begin()+max_height));
+        //printf("first interesting: %d\n", first_interesting);
+        //for (int i = max_height - 1; i >= first_interesting; --i) {
+        //    result_test[i] = prev_node;
+        //}
+        for (int i = height - 1; i >= 0; --i) {
+            LOG_HEIGHT_TRAVERSED;
+            while((*prev_nexts)[i] && compare((*prev_nexts)[i]->e, e)) {
+                LOG_NODE_STEP;
+                prev_node = (*prev_nexts)[i];
+                prev_nexts = &(prev_node->s);
             }
-            else if (!comp((*prev_nexts)[i]->e, e)) {
-                LOG_ELT_COMPARISON;
-                result[i] = prev_node;
-            }
-            else {
-                do {
-                    ASSERT(comp((*prev_nexts)[i]->e, e));
-                    LOG_NODE_STEP;
-                    prev_node = (*prev_nexts)[i];
-                    prev_nexts = &(prev_node->s);
-                    LOG_CONDITIONAL((*prev_nexts)[i], LOG_ELT_COMPARISON);
-                } while((*prev_nexts)[i] && comp((*prev_nexts)[i]->e, e));
-                LOG_CONDITIONAL((*prev_nexts)[i], LOG_ELT_COMPARISON);
-
-                result[i] = prev_node;
-            }
+            //if (i < first_interesting) {
+            //    result_test[i] = prev_node;
+            //}
+            result[i] = prev_node;
         }
+        //for_each(std::begin(result), std::end(result), [](node* n) {
+        //    if (n) { cout << n->e << " "; }
+        //    else { cout << "(null) "; }
+        //});
+        //cout << endl;
+        //for_each(std::begin(result_test), std::end(result_test), [](node* n) {
+        //    if (n) { cout << n->e << " "; }
+        //    else { cout << "(null) "; }
+        //});
+        //cout << endl;
+        //for (int i = 0; i < max_height; ++i) {
+        //    assert(result[i] == result_test[i]);
+        //}
         return result;
     }
 
@@ -124,34 +147,66 @@ public:
         return std::min(gen(),max_height-1) + 1;
     }
 
-public:
-    // Not really sure this is correct. Either way, only works
-    // for ints.
-    void dbg_print() {
-        const int N = this->size();
-        for (int height = max_height; height >= 0; --height) {
-            if (heads[height]) {
-                printf("[]--");
-            }
-            else {
-                printf("X------");
-            }
+    bool check_simple_invariants() const {
+        // find the first head that's null
+        // everything after the first null entry must also be null.
+        auto it = std::find(std::begin(heads), std::end(heads), nullptr);
+        if (!std::all_of(it, std::end(heads), [](node* n) { return !n; })) {
+            return false;
+        }
+
+        if (heads[0]) {
             node* n = heads[0];
-            while(n) {
-                if (n->s.size() > height && n->s[height]) {
-                    printf("[%d->%d]--", n->e, n->s[height]->e);
+            while (n) {
+                auto it = std::find(std::begin(n->s), std::end(n->s), nullptr);
+                if (!std::all_of(it, std::end(n->s), [](node* n) { return !n; })) {
+                    return false;
                 }
-                else if (n->s.size() > height) {
-                    printf("[%d]-----", n->e);
-                }
-                else {//if (heads[height]) {
-                    printf("-------");
-                }
-                //else {
-                //}
                 n = n->s[0];
             }
-            printf("X\n");
+        }
+        return true;
+    }
+
+
+public:
+    std::vector<int> tree_measure() {
+        vector<int> counter(max_height,0);
+        for (auto it = this->begin(); it != this->end(); ++it) {
+            auto n = it.mynode;
+            counter[n->s.size()]++;
+        }
+        return counter;
+    }
+    void dbg_print() {
+        const int N = this->size();
+        for (int height = max_height-1; height >= 0; --height) {
+            if (heads[height]) {
+                if (height > 9) {
+                    printf("[%d]--", height);
+                }
+                else {
+                    printf("[0%d]--", height);
+                }
+            }
+            else { continue ;} // don't print a height that was never reached...?
+            node* n = heads[0];
+            while (n) {
+                if (n->s.size() > height) {
+                    if (n->e > 9) {
+                        printf("[%d]", n->e);
+                    }
+                    else {
+                        printf("[0%d]", n->e);
+                    }
+                }
+                else {
+                    printf("----");
+                }
+                printf("--");
+                n = n->s[0];
+            }
+            printf("|\n");
         }
     }
     
@@ -186,9 +241,9 @@ public:
         if (this == &that) { return *this; }
         this->clear();
         this->heads = that.heads;
-        // maybe remove this if not necessary.
-        // TODO: Figure out what's supposed to happen here. UB?
-        //that.heads = std::vector<pnode>{0,nullptr};
+        // I have to do this, otherwise if it gets destructed
+        // it will remove the memory out from under us.
+        std::fill(std::begin(that.heads), std::end(that.heads), nullptr);
         return *this;
     }
     skip_list& operator=(std::initializer_list<T> l) {
@@ -235,16 +290,21 @@ public:
     }
 
     bool are_equal(const value_type& v1, const value_type& v2) const {
-        Compare comp;
-        return !comp(v1, v2) && !comp(v2, v1);
+        //elt_compared--;
+        if (!compare(v1, v2)) {
+            //elt_compared--;
+            return !compare(v2, v1);
+        }
+        return false;
     }
 
     bool preds_have_e(const slice& predecessors, const value_type& value) const {
-        return (predecessors[0] &&
-               predecessors[0]->s[0] &&
-               are_equal(predecessors[0]->s[0]->e, value))
-                ||
-               (!predecessors[0] && heads[0] && are_equal(heads[0]->e, value));
+        if (predecessors[0]) {
+            return predecessors[0]->s[0] && are_equal(predecessors[0]->s[0]->e, value);
+        }
+        else {
+            return heads[0] && are_equal(heads[0]->e, value);
+        }
     }
 
     slice generate_slice() const {
@@ -275,6 +335,7 @@ public:
         DBG_PRINT("new_node has height: %lu\n", new_node->s.size());
 
         stitch_up_node(predecessors, new_node);
+        assert(check_simple_invariants());
         return {new_node, true};
     }
 
@@ -343,43 +404,58 @@ public:
     // iterator insert(const_iterator hint, node_type&& nh); // C++17
 
     void erase(const T& e) {
-        value_compare comp;
         slice to_stitch{slice_preceeding(e)};
-        node* to_del = nullptr;
-        // the element is smaller than anything we actually have.
-        if (!to_stitch[0] &&
-            (!heads[0] || !are_equal(e, heads[0]->e))) {
-            ASSERT(comp(heads[0]->e, e));
-            return;
-        }
-        // The element is the first in the set:
-        else if (heads[0] && are_equal(heads[0]->e, e)) {
-            to_del = heads[0];
+        node* pre_to_del = to_stitch[0];
 
-            for (int i = 0; i < max_height; ++i) {
-                if (heads[i] == to_del) {
-                    heads[i] = heads[i]->s[i];
-                }
+        // either equal to or less than heads[0]->e
+        if (!pre_to_del && heads[0]) {
+            // less than
+            if (compare(e, heads[0]->e)) {
+                return;
             }
-            delete to_del;
-            return;
+            // equal to
+            else if (!compare(heads[0]->e, e)) {
+                node* to_del = heads[0];
+
+                for (int i = 0; i < max_height; ++i) {
+                    if (heads[i] == to_del) {
+                        heads[i] = heads[i]->s[i];
+                    }
+                }
+                delete to_del;
+                assert(check_simple_invariants());
+                return;
+            }
         }
-        // the element exists...
-        else if (to_stitch[0] &&
-            to_stitch[0]->s[0] &&
-            are_equal(to_stitch[0]->s[0]->e, e)) {
-            to_del = to_stitch[0]->s[0];
+        // if the element is in the list other than the head
+        else if (pre_to_del && pre_to_del->s[0] && are_equal(pre_to_del->s[0]->e, e)) {
+            node* to_del = pre_to_del->s[0];
             for (int i = 0; i < max_height; ++i) {
+                if (i < to_del->s.size()) {
+                    assert(to_stitch[i] || heads[i]);
+                    assert(heads[i] == to_del || to_stitch[i]->s[i] == to_del);
+                    if (to_stitch[i]) {
+                        assert(to_stitch[i]->s[i]->s[i] == to_del->s[i]);
+                    }
+                    else {
+                        assert(heads[i]->s[i] == to_del->s[i]);
+                    }
+                }
+                else {
+                    assert(to_stitch[i] != to_del);
+                }
                 if (to_stitch[i] && to_stitch[i]->s[i] == to_del) {
                     to_stitch[i]->s[i] = to_stitch[i]->s[i]->s[i];
                 }
                 else if (heads[i] && heads[i] == to_del) {
-                    heads[i] = nullptr;
+                    heads[i] = heads[i]->s[i];
                 }
             }
             delete to_del;
+            assert(check_simple_invariants());
             return;
         }
+        // otherwise, it's not here.
         return;
     }
     
@@ -400,7 +476,7 @@ public:
         const_iterator& operator++(int) {
             return ++(*this);
         }
-        T operator*() { return mynode->e; }
+        const T& operator*() { return mynode->e; }
         bool operator==(const const_iterator& that) const { return mynode == that.mynode; }
         bool operator!=(const const_iterator& that) const { return !((*this) == that); }
     };
@@ -419,7 +495,7 @@ public:
             //printf("now: %p\n", mynode);
             return *this;
         }
-        T operator*() { return mynode->e; }
+        T& operator*() { return mynode->e; }
         bool operator==(const iterator& that) const { return mynode == that.mynode; }
         bool operator!=(const iterator& that) const { return !((*this) == that); }
     };
@@ -453,7 +529,6 @@ public:
     // TODO: Can't I share code by constructing a const_iterator
     // from iterator?
     iterator find(const T& e) {
-        value_compare comp;
         int i = max_height - 1;
 
         // find the highest non-null element.
@@ -462,7 +537,7 @@ public:
         auto curr = heads[i];
         ASSERT(curr);
         while (i > 0) {
-            while (curr && comp(e, curr->e)) {
+            while (curr && compare(e, curr->e)) {
                 curr = curr->s[i];
             }
             --i;
@@ -475,7 +550,6 @@ public:
         }
     }
     const_iterator find(const T& e) const {
-        value_compare comp;
         int i = max_height - 1;
 
         // find the highest non-null element.
@@ -484,7 +558,7 @@ public:
         auto curr = heads[i];
         ASSERT(curr);
         while (i > 0) {
-            while (curr && comp(e, curr->e)) {
+            while (curr && compare(e, curr->e)) {
                 curr = curr->s[i];
             }
             --i;

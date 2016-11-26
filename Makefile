@@ -1,4 +1,4 @@
-tests: error_tests
+tests: error_tests random_tests
 
 random_tests: random_tests.cpp skiplist.h
 	clang++ -g -Wall -O3 -std=c++14 random_tests.cpp -o random_tests

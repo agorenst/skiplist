@@ -125,3 +125,55 @@ TEST_CASE("assertion failure after changing to Compare") {
         REQUIRE(equal(begin(l), end(l), begin(s), end(s)));
     }
 }
+
+
+// I measured that, in a series of random insertion both over
+// a small and large domain, my skip list took about 1.8 comparisons
+// for ever 1 comparison std::set used.
+//
+// In an experiment to see if it would help, I started trying to implement
+// a binary-search (rather than linear search) technique for insertion.
+// Not obvious it would help, hence, experiment.
+//
+// Along the way, I found that a certain series of insertions and removals
+// would violate the invariant that each "stack" of links would be contiguous
+// non-null, then contiguous-null. This input, somehow, lead to head
+// have null in the [1] position, but non-null in the [0], [2] positions.
+//
+// The cause: a small error in erasing, where I would always set "head[i]" to
+// nullptr. I really need to refactor how finding predecessors notates
+// that the heads list is the predecessor. Nontrivial design question.
+TEST_CASE("invariant violation") {
+    int invariant_violation[] = {0, 1, 1,
+        3, 1, 1,
+        4, 3, 1,
+        2, 2, 1,
+        0, 1, 1,
+        1, 1, 1,
+        3, 2, 1,
+        1, 1, 1,
+        3, 3, 1,
+        2, 2, 1,
+        2, 2, -1,
+        15, 1, 1,
+        -999};
+    skip_list<int, 32, good_height_generator> l;
+    set<int> s;
+    int i = 0;
+    while(invariant_violation[i] != -999) {
+        int value = invariant_violation[i++];
+        int height = invariant_violation[i++];
+        int to_insert = invariant_violation[i++];
+        printf("%d %d %d\n", value, height, to_insert);
+        l.dbg_print();
+        if (to_insert == 1) {
+            l.insert(value, height);
+            s.insert(value);
+        }
+        else {
+            l.erase(value);
+            s.erase(value);
+        }
+        REQUIRE(equal(begin(l), end(l), begin(s), end(s)));
+    }
+}

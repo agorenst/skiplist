@@ -96,7 +96,7 @@ struct logging_comparer {
     }
 };
 
-void measure_compare_counts() {
+void measure_compare_counts_ordered_insert() {
     std::set<int, logging_comparer> s;
     for (int i = 0; i < 1000000; ++i) {
         s.insert(i);
@@ -110,7 +110,30 @@ void measure_compare_counts() {
     cout << "Logging comparer for skiplist: " << logging_comparer_counter << endl;
 }
 
+void measure_compare_counts_random_insert() {
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> input_box(0, 1000000);
+    std::set<int, logging_comparer> s;
+    for (int i = 0; i < 1000000; ++i) {
+        s.insert(input_box(gen));
+    }
+    cout << "Logging comparer for std::set: " << logging_comparer_counter << endl;
+    logging_comparer_counter = 0;
+    skip_list<int,20,good_height_generator,logging_comparer> l;
+    for (int i = 0; i < 1000000; ++i) {
+        l.insert(input_box(gen));
+    }
+    cout << "Logging comparer for skiplist: " << logging_comparer_counter << endl;
+    auto tm = l.tree_measure();
+    cout << "tree measure: ";
+    for_each(begin(tm), end(tm), [](int x) {
+        cout << x << " ";
+    });
+    cout << endl;
+}
+
+
 int main() {
-    measure_compare_counts();
+    measure_compare_counts_random_insert();
     //count_asymptotic_behavior_degenerate<10>();
 }

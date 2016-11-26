@@ -1,7 +1,7 @@
 #define CATCH_CONFIG_MAIN
 #include "Catch/single_include/catch.hpp"
 
-//#define LOGGING_INFO
+#define LOGGING_INFO
 //#define SKIPLIST_DEBUG
 #include "skiplist.h"
 #include <algorithm>
@@ -53,13 +53,18 @@ struct logging_comparer_2 {
 };
 
 TEST_CASE("Random set of insertions and deletions.") {
-    const int N = 17;
+    const int N = 17;//15485867;
     const int M = 17;
-    skip_list<int, 32, good_height_generator, logging_comparer_1> l;
+    const int S = 32;
+    skip_list<int, S, good_height_generator, logging_comparer_1> l;
+    //skip_list<int, 32, good_height_generator> l;
+    l.LOG_reset_elt_comparisons();
     set<int,logging_comparer_2> s;
     for (int i = 0; i < 1000000; ++i) {
         int value = dis(gen) % N;
-        int height = good_height_generator()+1;
+        int height = min(S, good_height_generator()+1);
+        //l.dbg_print();
+        //printf("\n");
         //printf("%d, %d, ", value, height);
         if (dis(gen) % M) {
             //printf("1,\n");
@@ -75,5 +80,6 @@ TEST_CASE("Random set of insertions and deletions.") {
     }
     cout << "Logging comparer for std::set: " << logging_comparer_counter_2 << endl;
     cout << "Logging comparer for skiplist: " << logging_comparer_counter_1 << endl;
+    cout << "How many comparisons skiplist logged: " << l.LOG_get_elt_comparisons() << endl;
 }
 
