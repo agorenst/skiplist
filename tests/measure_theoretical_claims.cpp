@@ -7,7 +7,7 @@
 #include <bitset>
 #include <set>
 
-#define LOGGING_INFO
+//#define LOGGING_INFO
 #include "skiplist.h"
 
 using namespace std;
@@ -31,6 +31,7 @@ std::uniform_int_distribution<> dis(0, 1 << 30);
 int good_height_generator() {
     return ntz(dis(gen))-1;
 }
+#if 0
 //
 //void benchmark_ntz() {
 //}
@@ -132,7 +133,7 @@ void measure_compare_counts_random_insert() {
     });
     cout << endl;
 }
-
+#endif
 #include "NoisyClass.h"
 #include <map>
 int NoisyClass::COPY_COUNTER;

@@ -32,7 +32,7 @@ using namespace std;
 int empty() { return 0; }
 
 TEST_CASE("constructor()") {
-    skip_list<int, 12, empty> l;
+    skip_list<int> l;
 }
 TEST_CASE("constructor(InputIn first, InputIn last)") {
     {

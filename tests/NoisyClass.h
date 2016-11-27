@@ -9,10 +9,10 @@ class NoisyClass {
     static int CONSTRUCTION_COUNTER;
     static int LT_COUNTER;
     int x;
-    NoisyClass(const NoisyClass& n): x(n.x+1) { COPY_COUNTER++; }
-    NoisyClass(NoisyClass&& n): x(n.x+1) { MOVE_COUNTER++; }
+    NoisyClass(const NoisyClass& n): x(n.x) { /*printf("copy!\n");*/ COPY_COUNTER++; }
+    NoisyClass(NoisyClass&& n): x(n.x) { /*printf("move!\n");*/ MOVE_COUNTER++; }
     NoisyClass() = delete;
-    explicit NoisyClass(int x): x(x) { CONSTRUCTION_COUNTER++; }
+    explicit NoisyClass(int x): x(x) { /*printf("construction!\n");*/ CONSTRUCTION_COUNTER++; }
     bool operator==(const NoisyClass& n) const { return x == n.x; }
     bool operator>=(const NoisyClass& n) const { return x >= n.x; }
     bool operator>(const NoisyClass& n) const { return x > n.x; }

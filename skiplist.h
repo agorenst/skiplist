@@ -141,14 +141,35 @@ public:
         slice result{height, nullptr};
         node* prev_node = nullptr;
         slice* prev_nexts = &heads;
-        for (int i = height - 1; i >= 0; --i) {
-            LOG_HEIGHT_TRAVERSED;
-            while((*prev_nexts)[i] && compare((*prev_nexts)[i]->e, e)) {
-                LOG_NODE_STEP;
-                prev_node = (*prev_nexts)[i];
-                prev_nexts = &(prev_node->s);
+
+        // TODO
+        // Code can definitely be refactored into a better loop,
+        // I'm sure, but for now I'm focused on reducing the number
+        // of comparisons.
+        for (int i = height - 1; i >= 0; ) {
+            while (i >= 0 && !(*prev_nexts)[i]) {
+                result[i--] = prev_node;
             }
-            result[i] = prev_node;
+            if (i < 0) { break; }
+
+            node* next = (*prev_nexts)[i];
+            ASSERT(next);
+            while (next && compare(next->e, e)) {
+                prev_node = next;
+                prev_nexts = &(next->s);
+                next = (*prev_nexts)[i];
+            }
+
+            // This is newer reasoning, attempting to reduce
+            // the number of compares. Scoot down the nexts list until
+            // we actually look at a new element.
+            ASSERT((*prev_nexts)[i] == next);
+            ASSERT(!next || !compare((*prev_nexts)[i]->e, e));
+            while (i >= 0 && (*prev_nexts)[i] == next) {
+                ASSERT(!next || !compare((*prev_nexts)[i]->e, e));
+                result[i--] = prev_node;
+            }
+            if (i < 0) { break; }
         }
         return result;
     }
@@ -330,10 +351,13 @@ public:
 
     bool preds_have_e(const slice& predecessors, const value_type& value) const {
         if (predecessors[0]) {
-            return predecessors[0]->s[0] && are_equal(predecessors[0]->s[0]->e, value);
+            return predecessors[0]->s[0] && !compare(value, predecessors[0]->s[0]->e);
         }
+        //if (predecessors[0]) {
+        //    return predecessors[0]->s[0] && are_equal(predecessors[0]->s[0]->e, value);
+        //}
         else {
-            return heads[0] && are_equal(heads[0]->e, value);
+            return heads[0] && !compare(value, heads[0]->e);//are_equal(heads[0]->e, value);
         }
     }
 
@@ -348,7 +372,8 @@ public:
     std::pair<iterator,bool> insert(const value_type& value, const int height) {
         slice predecessors{slice_preceeding(value)};
         if (preds_have_e(predecessors, value)) {
-            return {predecessors[0], false};
+            if (predecessors[0]) { return { predecessors[0]->s[0], false }; }
+            else { return { heads[0], false }; }
         }
         int new_height = height;
         slice new_slice(new_height, nullptr);
@@ -359,9 +384,11 @@ public:
     }
 
     std::pair<iterator,bool> insert(value_type&& value) {
+        //printf("std::pair<iterator,bool> insert(value_type&& value)\n");
         slice predecessors{slice_preceeding(value)};
         if (preds_have_e(predecessors, value)) {
-            return {predecessors[0], false};
+            if (predecessors[0]) { return { predecessors[0]->s[0], false }; }
+            else { return { heads[0], false }; }
         }
         int new_height = generate_height();
         slice new_slice(new_height, nullptr);
@@ -372,9 +399,11 @@ public:
     }
 
     std::pair<iterator,bool> insert(const value_type& value) {
+        //printf("std::pair<iterator,bool> insert(const value_type& value)\n");
         slice predecessors{slice_preceeding(value)};
         if (preds_have_e(predecessors, value)) {
-            return {predecessors[0], false};
+            if (predecessors[0]) { return { predecessors[0]->s[0], false }; }
+            else { return { heads[0], false }; }
         }
 
         int new_height = generate_height();
@@ -394,7 +423,8 @@ public:
         slice predecessors{slice_preceeding(new_node->e)};
         if (preds_have_e(predecessors, new_node->e)) {
             delete new_node;
-            return {predecessors[0], false};
+            if (predecessors[0]) { return { predecessors[0]->s[0], false }; }
+            else { return { heads[0], false }; }
         }
 
         stitch_up_node(predecessors, new_node);
@@ -490,6 +520,7 @@ public:
             return ++(*this);
         }
         const T& operator*() { return mynode->e; }
+        const pointer operator->() { return &(mynode->e); }
         bool operator==(const const_iterator& that) const { return mynode == that.mynode; }
         bool operator!=(const const_iterator& that) const { return !((*this) == that); }
     };
@@ -509,6 +540,7 @@ public:
             return *this;
         }
         T& operator*() { return mynode->e; }
+        pointer operator->() { return &(mynode->e); }
         bool operator==(const iterator& that) const { return mynode == that.mynode; }
         bool operator!=(const iterator& that) const { return !((*this) == that); }
     };

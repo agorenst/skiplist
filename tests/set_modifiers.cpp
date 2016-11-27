@@ -37,8 +37,86 @@ TEST_CASE("void clear()") {
 }
 
 TEST_CASE("std::pair<iterator,bool> insert(const value_type& value)") {
+    auto n = NoisyClass(4);
+    NoisyClass::reset_state();
+    std::set<NoisyClass> s;
+
+    auto set_pair = s.insert(n);
+    REQUIRE(NoisyClass::CONSTRUCTION_COUNTER == 0);
+    REQUIRE(NoisyClass::MOVE_COUNTER == 0);
+    REQUIRE(NoisyClass::COPY_COUNTER == 1);
+    REQUIRE(set_pair.second);
+    REQUIRE(set_pair.first->x == 4);
+
+    NoisyClass::reset_state();
+    set_pair = s.insert(n);
+    REQUIRE(NoisyClass::LT_COUNTER == 2);
+    REQUIRE(NoisyClass::CONSTRUCTION_COUNTER == 0);
+    REQUIRE(NoisyClass::MOVE_COUNTER == 0);
+    REQUIRE(NoisyClass::COPY_COUNTER == 0);
+    REQUIRE(!set_pair.second);
+    REQUIRE(set_pair.first->x == 4);
+
+
+
+    NoisyClass::reset_state();
+    skip_list<NoisyClass> l;
+    auto skip_pair = l.insert(n);
+    REQUIRE(NoisyClass::LT_COUNTER == 0);
+    REQUIRE(NoisyClass::CONSTRUCTION_COUNTER == 0);
+    REQUIRE(NoisyClass::MOVE_COUNTER == 0);
+    REQUIRE(NoisyClass::COPY_COUNTER == 1);
+    REQUIRE(skip_pair.second);
+    REQUIRE(skip_pair.first->x == 4);
+
+    NoisyClass::reset_state();
+    skip_pair = l.insert(n);
+    REQUIRE(NoisyClass::LT_COUNTER == 2);
+    REQUIRE(NoisyClass::CONSTRUCTION_COUNTER == 0);
+    REQUIRE(NoisyClass::MOVE_COUNTER == 0);
+    REQUIRE(NoisyClass::COPY_COUNTER == 0);
+    REQUIRE(!skip_pair.second);
+    REQUIRE(skip_pair.first->x == 4);
 }
 TEST_CASE("std::pair<iterator,bool> insert(value_type&& value)") {
+    NoisyClass::reset_state();
+    std::set<NoisyClass> s;
+
+    auto set_pair = s.insert(NoisyClass(4));
+    REQUIRE(NoisyClass::CONSTRUCTION_COUNTER == 1);
+    REQUIRE(NoisyClass::MOVE_COUNTER == 1);
+    REQUIRE(NoisyClass::COPY_COUNTER == 0);
+    REQUIRE(set_pair.second);
+    REQUIRE(set_pair.first->x == 4);
+
+    NoisyClass::reset_state();
+    set_pair = s.insert(NoisyClass(4));
+    REQUIRE(NoisyClass::LT_COUNTER == 2);
+    REQUIRE(NoisyClass::CONSTRUCTION_COUNTER == 1);
+    REQUIRE(NoisyClass::MOVE_COUNTER == 0);
+    REQUIRE(NoisyClass::COPY_COUNTER == 0);
+    REQUIRE(!set_pair.second);
+    REQUIRE(set_pair.first->x == 4);
+
+
+
+    NoisyClass::reset_state();
+    skip_list<NoisyClass> l;
+    auto skip_pair = l.insert(NoisyClass(4));
+    REQUIRE(NoisyClass::CONSTRUCTION_COUNTER == 1);
+    REQUIRE(NoisyClass::MOVE_COUNTER == 1);
+    REQUIRE(NoisyClass::COPY_COUNTER == 0);
+    REQUIRE(skip_pair.second);
+    REQUIRE(skip_pair.first->x == 4);
+
+    NoisyClass::reset_state();
+    skip_pair = l.insert(NoisyClass(4));
+    REQUIRE(NoisyClass::LT_COUNTER == 2);
+    REQUIRE(NoisyClass::CONSTRUCTION_COUNTER == 1);
+    REQUIRE(NoisyClass::MOVE_COUNTER == 0);
+    REQUIRE(NoisyClass::COPY_COUNTER == 0);
+    REQUIRE(!skip_pair.second);
+    REQUIRE(skip_pair.first->x == 4);
 }
 TEST_CASE("iterator insert(const_iterator hint, const value_type& value)") {
 }

@@ -1,7 +1,7 @@
 CXX = clang++
 CXXFLAGS = -std=c++14 -Wall -O3 -g
 
-all: measure_theoretical_claims
+all: set_modifiers
 
 measure_theoretical_claims: measure_theoretical_claims.cpp ./../skiplist.h
 	$(CXX) $(CXXFLAGS) -I./../ measure_theoretical_claims.cpp -o measure_theoretical_claims

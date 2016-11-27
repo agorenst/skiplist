@@ -67,14 +67,14 @@ void insert_random_integers_many_overlap(int count, int range) {
 int main() {
     typedef std::set<int> baseline_type;
     typedef skip_list<int> skiplist_type;
-    const int N = 10000000;
+    const int N = 5000000;
 
     cout << "std::set<int>" << endl;
     auto t = measure<>::execution(insert_integer_range<baseline_type>, 0, N);
     cout << "time: " << t << endl;
     t = measure<>::execution(insert_reverse_integer_range<baseline_type>, 0, N);
     cout << "time: " << t << endl;
-    t = measure<>::execution(insert_random_integers<baseline_type>, N, N);
+    t = measure<>::execution(insert_random_integers<baseline_type>, N/4, N);
     cout << "time: " << t << endl;
 
     cout << "skiplist type: " << endl;
@@ -82,7 +82,7 @@ int main() {
     cout << "time: " << t << endl;
     t = measure<>::execution(insert_reverse_integer_range<skiplist_type>, 0, N);
     cout << "time: " << t << endl;
-    t = measure<>::execution(insert_random_integers<skiplist_type>, N, N);
+    t = measure<>::execution(insert_random_integers<skiplist_type>, N/4, N);
     cout << "time: " << t << endl;
 }
 
