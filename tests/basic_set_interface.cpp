@@ -1,16 +1,31 @@
 #define CATCH_CONFIG_MAIN
 #include "Catch/single_include/catch.hpp"
 
-#define LOGGING_INFO
-#define DEBUG_MODE
-#include "skiplist.h"
 #include <algorithm>
 #include <set>
 
+
+// Turn on all the checks for skiplist.
+#define LOGGING_INFO
+#define DEBUG_MODE
+#include "skiplist.h"
+
 // Tests confirming that skip_list meets basic definition of a set.
 // Reference: http://en.cppreference.com/w/cpp/container/set/set
-// I'm going to try to match the latest-possible standard, but some
-// of the things (Compare?) are a bit too abstract right now...
+//
+// This is less about making sure the skip_list is a correct set,
+// and more about making sure it fulfills certain C++-specific contracts.
+//
+// An interesting example is that emplacing, inserting, and finding
+// elements should only invoke construction, move, copying etc. a
+// certain amount.
+//
+// Another motivation is just making sure we fulfill the *full* interface,
+// with the hope that we can slot in a skiplist whenever we'd want
+// a std::set.
+//
+// There's a certain amount of sanity checking that some basic methods
+// at least give the right answer in obvious cases (e.g., size_t size()).
 
 using namespace std;
 

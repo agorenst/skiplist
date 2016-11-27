@@ -21,4 +21,4 @@ exhaustive_testing: exhaustive_testing.cpp skiplist.h
 skiplist_test: skiplist_test.cpp skiplist.h
 	clang++ -O2 -g -Wall -std=c++14 skiplist_test.cpp -o skiplist_test
 clean:
-	rm skiplist_test basic_set_interface exhaustive_testing benchmarks_test rbtree_test skiplist_test verify_theoretical_properties core_test basic_performance_checks error_tests random_tests
+	rm skiplist_test basic_set_interface exhaustive_testing benchmarks_test rbtree_test skiplist_test verify_theoretical_properties core_test basic_performance_checks error_tests random_tests a.out

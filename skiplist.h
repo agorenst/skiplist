@@ -6,6 +6,7 @@
 #include <memory>
 #include <cstdio>
 #include <iterator>
+#include <climits>
 
 
 // Are we compiling in logging mode?
@@ -33,9 +34,42 @@
 #include <iostream>
 using namespace std;
 
-template<typename T, int max_height, int (*gen)(),
-         class Compare = std::less<T>,
-         class Allocator = std::allocator<T>>
+
+#include <random>
+
+
+// Setting "sane" defaults to save typing -- will refine defaults
+// as performance testing solidifies.
+namespace skiplist_internal {
+std::random_device rd;
+std::mt19937 gen(rd());
+std::uniform_int_distribution<> dis(0, 1 << 30);
+
+// From hacker's delight
+int ntz(unsigned int x) {
+    static_assert(sizeof(unsigned int) == 4, "Assuming 4-byte integers");
+    static_assert(CHAR_BIT == 8, "Assuming 8-bit bytes");
+    if (x == 0) { return 32; }
+    int n = 1;
+    if ((x & 0x0000FFFF) == 0) { n = n + 16; x >>= 16; }
+    if ((x & 0x000000FF) == 0) { n = n + 8; x >>= 8; }
+    if ((x & 0x0000000F) == 0) { n = n + 4; x >>= 4; }
+    if ((x & 0x00000003) == 0) { n = n + 2; x >>= 2; }
+    return n - (x & 1);
+}
+
+int good_height_generator() {
+    auto x = dis(gen);
+    return ntz(x)+1;
+}
+};
+
+template<typename T,
+    // TODO: can max_height be a constexpr of generator.max()?
+    int max_height = 32,
+    int (*gen)() = skiplist_internal::good_height_generator,
+    class Compare = std::less<T>,
+    class Allocator = std::allocator<T>>
 class skip_list {
     private:
     struct node;
@@ -105,16 +139,8 @@ public:
     // that would be the predecessors for element e.
     slice slice_preceeding(const T& e, const size_type height = max_height) {
         slice result{height, nullptr};
-        //slice result_test{height, nullptr};
         node* prev_node = nullptr;
         slice* prev_nexts = &heads;
-        //auto first_interesting = find_i_to_fwd(e,
-        //        prev_nexts->begin(),
-        //        (prev_nexts->begin()+max_height));
-        //printf("first interesting: %d\n", first_interesting);
-        //for (int i = max_height - 1; i >= first_interesting; --i) {
-        //    result_test[i] = prev_node;
-        //}
         for (int i = height - 1; i >= 0; --i) {
             LOG_HEIGHT_TRAVERSED;
             while((*prev_nexts)[i] && compare((*prev_nexts)[i]->e, e)) {
@@ -122,29 +148,15 @@ public:
                 prev_node = (*prev_nexts)[i];
                 prev_nexts = &(prev_node->s);
             }
-            //if (i < first_interesting) {
-            //    result_test[i] = prev_node;
-            //}
             result[i] = prev_node;
         }
-        //for_each(std::begin(result), std::end(result), [](node* n) {
-        //    if (n) { cout << n->e << " "; }
-        //    else { cout << "(null) "; }
-        //});
-        //cout << endl;
-        //for_each(std::begin(result_test), std::end(result_test), [](node* n) {
-        //    if (n) { cout << n->e << " "; }
-        //    else { cout << "(null) "; }
-        //});
-        //cout << endl;
-        //for (int i = 0; i < max_height; ++i) {
-        //    assert(result[i] == result_test[i]);
-        //}
         return result;
     }
 
     int generate_height() const {
-        return std::min(gen(),max_height-1) + 1;
+        auto height = std::min(gen(), max_height-1);
+        ASSERT(0 < height && height < max_height);
+        return height;
     }
 
     bool check_simple_invariants() const {
@@ -165,6 +177,28 @@ public:
                 n = n->s[0];
             }
         }
+
+        node* n = heads[0];
+        while (n) {
+            // for all our slice, each non-null element should not be less
+            // than the next slice element
+            for (int i = n->s.size() - 2; i >= 0; i--) {
+                if (n->s[i+1]) {
+                    if (compare(n->s[i+1]->e, n->s[i]->e)) {
+                        return false;
+                    }
+                }
+            }
+            // we better be less than the element we precede.
+            if (n->s[0]) {
+                if (compare(n->s[0]->e, n->e)) {
+                    return false;
+                }
+            }
+            // assuming that compare is transitive, at this point our stack
+            // is consistently sorted.
+            n = n->s[0];
+        }
         return true;
     }
 
@@ -179,7 +213,6 @@ public:
         return counter;
     }
     void dbg_print() {
-        const int N = this->size();
         for (int height = max_height-1; height >= 0; --height) {
             if (heads[height]) {
                 if (height > 9) {
@@ -262,6 +295,7 @@ public:
         std::fill(std::begin(heads), std::end(heads), nullptr);
     }
 
+    // for now we're just bailing on using the "hint"
     iterator insert(const_iterator hint, const value_type& value) {
         auto iter_and_flag = insert(value);
         return std::get<0>(iter_and_flag);
@@ -272,11 +306,8 @@ public:
     }
 
 
-    void stitch_up_node(const slice& predecessors, node* __restrict new_node) {
-        DBG_PRINT("stitch_up_node: entering\n");
+    void stitch_up_node(const slice& predecessors, node* new_node) {
         const int new_height = new_node->s.size();
-        ASSERT(new_height > 0); // otherwise memory leak...
-        DBG_PRINT("new_height: %d\n", new_height);
         for (int i = 0; i < new_height; ++i) {
             if (predecessors[i] == nullptr) {
                 new_node->s[i] = heads[i];
@@ -287,12 +318,11 @@ public:
                 predecessors[i]->s[i] = new_node;
             }
         }
+        ASSERT(check_simple_invariants());
     }
 
     bool are_equal(const value_type& v1, const value_type& v2) const {
-        //elt_compared--;
         if (!compare(v1, v2)) {
-            //elt_compared--;
             return !compare(v2, v1);
         }
         return false;
@@ -307,50 +337,35 @@ public:
         }
     }
 
-    slice generate_slice() const {
-        return slice{(size_t)generate_height(), nullptr};
-    }
-
     // TODO: Share code between the different inserts and emplace.
     // I'm deliberately waiting because I don't know all the design considerations
     // yet (multithreading, exception handling, debugging, etc.)
+    // TODO: Use allocator properly.
+    // TODO: Lots of asserts?
+    // TODO: Logging (to help unit tests verify that we have the coverage we expect)
+    // TODO: Watch for multiset functionality.
 
-    // Mainly helpful for debugging.
-    // Specify the height of the node without using the RNG
     std::pair<iterator,bool> insert(const value_type& value, const int height) {
         slice predecessors{slice_preceeding(value)};
-        // TODO: watch for multiset functionality...
-        // do we already have the element?
         if (preds_have_e(predecessors, value)) {
             return {predecessors[0], false};
         }
-
-        ASSERT(height < max_height);
-
         int new_height = height;
         slice new_slice(new_height, nullptr);
-        DBG_PRINT("insert(const value_type&, height): constructing new node\n");
         auto new_node = new node{new_slice, value};
-        DBG_PRINT("insert(const value_type&, height): done constructing node\n");
-        DBG_PRINT("new_node has height: %lu\n", new_node->s.size());
 
         stitch_up_node(predecessors, new_node);
-        assert(check_simple_invariants());
         return {new_node, true};
     }
 
     std::pair<iterator,bool> insert(value_type&& value) {
         slice predecessors{slice_preceeding(value)};
-        // TODO: watch for multiset functionality...
-        // do we already have the element?
         if (preds_have_e(predecessors, value)) {
             return {predecessors[0], false};
         }
         int new_height = generate_height();
         slice new_slice(new_height, nullptr);
-        DBG_PRINT("insert(value_type&&): constructing new node\n");
         auto new_node = new node{new_slice, std::move(value)};
-        DBG_PRINT("insert(value_type&&): done constructing node\n");
 
         stitch_up_node(predecessors, new_node);
         return {new_node, true};
@@ -358,17 +373,13 @@ public:
 
     std::pair<iterator,bool> insert(const value_type& value) {
         slice predecessors{slice_preceeding(value)};
-        // TODO: watch for multiset functionality...
-        // do we already have the element?
         if (preds_have_e(predecessors, value)) {
             return {predecessors[0], false};
         }
 
         int new_height = generate_height();
         slice new_slice(new_height, nullptr);
-        DBG_PRINT("insert(const value_type&): constructing new node\n");
         auto new_node = new node{new_slice, value};
-        DBG_PRINT("insert(const value_type&): done constructing node\n");
 
         stitch_up_node(predecessors, new_node);
         return {new_node, true};
@@ -378,9 +389,7 @@ public:
     std::pair<iterator, bool> emplace(Args&&... args) {
         // We make the node first
         slice new_nexts{(size_t) generate_height(), nullptr};
-        DBG_PRINT("emplace(args): constructing new node\n");
         auto new_node = new node{new_nexts, args...};
-        DBG_PRINT("emplace(args): done constructing node\n");
 
         slice predecessors{slice_preceeding(new_node->e)};
         if (preds_have_e(predecessors, new_node->e)) {
@@ -390,6 +399,10 @@ public:
 
         stitch_up_node(predecessors, new_node);
         return {new_node, true};
+    }
+
+    void insert(std::initializer_list<value_type> ilist) {
+        insert(std::begin(ilist), std::end(ilist));
     }
 
     template<typename InputIt>
@@ -423,7 +436,7 @@ public:
                     }
                 }
                 delete to_del;
-                assert(check_simple_invariants());
+                ASSERT(check_simple_invariants());
                 return;
             }
         }
@@ -432,17 +445,17 @@ public:
             node* to_del = pre_to_del->s[0];
             for (int i = 0; i < max_height; ++i) {
                 if (i < to_del->s.size()) {
-                    assert(to_stitch[i] || heads[i]);
-                    assert(heads[i] == to_del || to_stitch[i]->s[i] == to_del);
+                    ASSERT(to_stitch[i] || heads[i]);
+                    ASSERT(heads[i] == to_del || to_stitch[i]->s[i] == to_del);
                     if (to_stitch[i]) {
-                        assert(to_stitch[i]->s[i]->s[i] == to_del->s[i]);
+                        ASSERT(to_stitch[i]->s[i]->s[i] == to_del->s[i]);
                     }
                     else {
-                        assert(heads[i]->s[i] == to_del->s[i]);
+                        ASSERT(heads[i]->s[i] == to_del->s[i]);
                     }
                 }
                 else {
-                    assert(to_stitch[i] != to_del);
+                    ASSERT(to_stitch[i] != to_del);
                 }
                 if (to_stitch[i] && to_stitch[i]->s[i] == to_del) {
                     to_stitch[i]->s[i] = to_stitch[i]->s[i]->s[i];
@@ -452,7 +465,7 @@ public:
                 }
             }
             delete to_del;
-            assert(check_simple_invariants());
+            ASSERT(check_simple_invariants());
             return;
         }
         // otherwise, it's not here.
@@ -504,7 +517,6 @@ public:
         return iterator{heads[0]};
     }
     iterator end() {
-        //printf("Making a new end iterator\n");
         return iterator{nullptr};
     }
     const_iterator begin() const {

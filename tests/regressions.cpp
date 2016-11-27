@@ -38,8 +38,6 @@ int empty() { return 0; }
 
 
 int error_input_seq[] = {4 , 1 , 5 , 0 , 16 , 1 , 10 , 1 , 1 , 6 , 11 , 0 , 1 , 0 , 6 , 1 , 10 , 1 , 16 , 0 };
-//int error_input_seq[] = {4 , 1 , 5 , 0 , 16 , 1 , 10 , 1 , 1 , 6 , 11 , 0 , 1 , 0 , 6 , 1 , 10 , 1 , 16 , 0 , 11 , 4 , 14 , 2 , 10 , 2 , 11 , 0 , 13 , 1 , 2 , 2 , 11 , 1 , 6 , 0 , 3 , 1 , 9 , 3 , 6 , 0 , 9 , 0 , 15 , 0 , 15 , 1 , 16 , 3 , 1 , 0 , 16 , 1 , 8 , 0 , 16 , 0 , 16 , 0 , 11 , 1 , 8 , 1 , 5 , 0 , 5 , 1 , 10 , 0 , 12 , 0 , 1 , 2 , 2 , 0 , 5 , 1 , 16 , 2 , 16 , 2 , 4 , 0 , 13 , 5 , 8 , 1 , 3 , 0 , 0 , 0 , 9 , 1 , 11 , 3 , 12 , 1 , 13 , 0 , 4 , 0 , 15 , 1 , 6 , 0 , 11 , 2 , 4 , 1 , 8 , 2 , 5 , 0 , 15 , 0 , 8 , 1 , 16 , 0 , 0 , 0 , 5 , 1 , 9 , 2 , 9 , 0 , 13 , 1 , 6 , 2 , 7 , 0 , 16 , 1 , 6 , 0 , 0 , 1 , 12 , 1 , 16 , 2 , 10 , 0 , 0 , 0 , 10 , 0 , 11 , 2 , 10 , 2 , 0 , 0 , 15 , 1 , 11 , 1 , 14 , 0 , 5 , 0 , 12 , 1 , 9 , 1 , 16 , 1 , 9 , 1 , 11 , 0 , 13 , 1 , 0 , 2 , 1 , 0 , 6 , 3 , 12 , 2 , 12 , 0 , 11 , 0 , 10 , 4 , 15 , 1 , 6 , 0 , 5 , 2 , 7 , 0 , 5 , 0};
-
 // Examining a benchmark, valgrind detected a memory leak. We were really
 // screwing up a few fundamental things, including allowing the insertion
 // of elements at the beginning of the list even if they were equal,
@@ -53,17 +51,8 @@ TEST_CASE("flushing out memory leak") {
         if (height <= 0) { height = 1; }
         l.insert(value, height);
         s.insert(value);
-        //printf("Inserted: %d %d\n", value, height);
-        //for_each(begin(l), end(l), [](int x) { printf("%d ", x); });
-        //printf("\n");
         REQUIRE(equal(begin(l), end(l), begin(s), end(s)));
     }
-    //for (int i = 0; i < 100; ++i) {
-    //    int value = dis(gen) % 17;
-    //    int height = good_height_generator()+1;
-    //    printf("%d %d\n", value, height);
-    //    l.insert(value, height);
-    //}
 }
 
 // Unfortunately I neglected to comment this test properly,

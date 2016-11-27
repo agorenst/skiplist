@@ -12,6 +12,7 @@
 
 using namespace std;
 
+// Maybe later verify the RNG...
 // From hacker's delight
 int ntz(unsigned int x) {
     static_assert(sizeof(unsigned int) == 4, "Assuming 4-byte integers");
@@ -49,7 +50,7 @@ template<int L>
 void count_asymptotic_behavior() {
     vector<int> x(L);
     for (int i = 0; i < L; ++i) { x[i] = i; }
-    skip_list<vector<int>, 32, good_height_generator> l;
+    skip_list<vector<int>> l;
     long long i = 0;
     int max_comparisons = 0;
     do {
@@ -71,7 +72,7 @@ template<int L>
 void count_asymptotic_behavior_degenerate() {
     vector<int> x(L);
     for (int i = 0; i < L; ++i) { x[L-(i+1)] = i; }
-    skip_list<vector<int>, 32, good_height_generator> l;
+    skip_list<vector<int>> l;
     long long i = 0;
     int max_comparisons = 0;
     do {
@@ -103,7 +104,7 @@ void measure_compare_counts_ordered_insert() {
     }
     cout << "Logging comparer for std::set: " << logging_comparer_counter << endl;
     logging_comparer_counter = 0;
-    skip_list<int,32,good_height_generator,logging_comparer> l;
+    skip_list<int> l;
     for (int i = 0; i < 1000000; ++i) {
         l.insert(i);
     }
@@ -119,7 +120,7 @@ void measure_compare_counts_random_insert() {
     }
     cout << "Logging comparer for std::set: " << logging_comparer_counter << endl;
     logging_comparer_counter = 0;
-    skip_list<int,20,good_height_generator,logging_comparer> l;
+    skip_list<int> l;
     for (int i = 0; i < 1000000; ++i) {
         l.insert(input_box(gen));
     }
@@ -132,8 +133,114 @@ void measure_compare_counts_random_insert() {
     cout << endl;
 }
 
+#include "NoisyClass.h"
+#include <map>
+int NoisyClass::COPY_COUNTER;
+int NoisyClass::MOVE_COUNTER;
+int NoisyClass::CONSTRUCTION_COUNTER;
+int NoisyClass::LT_COUNTER;
 
+long long int histogram_report(const std::map<int,int>& m) {
+    long long int sum = 0;
+    for (auto&& p : m) {
+        cout << p.first << "\t" << p.second;
+        cout << endl;
+        sum += p.first*p.second;
+    }
+    cout << "Sum: " << sum << endl;
+    return sum;
+}
+
+void measure_sorted_inserts() {
+    skip_list<NoisyClass> l;
+    std::set<NoisyClass> s;
+    std::map<int,int> skiplist_compare_counts_histogram;
+    std::map<int,int> set_compare_counts_histogram;
+    NoisyClass::reset_state();
+    for (int i = 0; i < 1000000; i++) {
+        l.emplace(i);
+        skiplist_compare_counts_histogram[NoisyClass::LT_COUNTER]++;
+        NoisyClass::reset_state();
+
+        s.emplace(i);
+        set_compare_counts_histogram[NoisyClass::LT_COUNTER]++;
+        NoisyClass::reset_state();
+    }
+
+    auto tm = l.tree_measure();
+    cout << "tree measure: ";
+    for_each(begin(tm), end(tm), [](int x) {
+        cout << x << " ";
+    });
+    cout << endl;
+    cout << "Skiplist histogram: " << endl;
+    histogram_report(skiplist_compare_counts_histogram);
+    cout << "Set histogram: " << endl;
+    histogram_report(set_compare_counts_histogram);
+}
+
+void measure_sorted_reversed_inserts() {
+    skip_list<NoisyClass> l;
+    std::set<NoisyClass> s;
+    std::map<int,int> skiplist_compare_counts_histogram;
+    std::map<int,int> set_compare_counts_histogram;
+    NoisyClass::reset_state();
+    for (int i = 1000000; i >= 0; i--) {
+        l.emplace(i);
+        skiplist_compare_counts_histogram[NoisyClass::LT_COUNTER]++;
+        NoisyClass::reset_state();
+
+        s.emplace(i);
+        set_compare_counts_histogram[NoisyClass::LT_COUNTER]++;
+        NoisyClass::reset_state();
+    }
+
+    auto tm = l.tree_measure();
+    cout << "tree measure: ";
+    for_each(begin(tm), end(tm), [](int x) {
+        cout << x << " ";
+    });
+    cout << endl;
+    cout << "Skiplist histogram: " << endl;
+    histogram_report(skiplist_compare_counts_histogram);
+    cout << "Set histogram: " << endl;
+    histogram_report(set_compare_counts_histogram);
+}
+
+void measure_random_dense_inserts() {
+    skip_list<NoisyClass> l;
+    std::set<NoisyClass> s;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> input_box(0, 100);
+    std::map<int,int> skiplist_compare_counts_histogram;
+    std::map<int,int> set_compare_counts_histogram;
+    NoisyClass::reset_state();
+    for (int i = 0; i < 1000000; i++) {
+        l.emplace(input_box(gen));
+        skiplist_compare_counts_histogram[NoisyClass::LT_COUNTER]++;
+        NoisyClass::reset_state();
+
+        s.emplace(input_box(gen));
+        set_compare_counts_histogram[NoisyClass::LT_COUNTER]++;
+        NoisyClass::reset_state();
+    }
+
+    auto tm = l.tree_measure();
+    cout << "tree measure: ";
+    for_each(begin(tm), end(tm), [](int x) {
+        cout << x << " ";
+    });
+    cout << endl;
+    cout << "Skiplist histogram: " << endl;
+    histogram_report(skiplist_compare_counts_histogram);
+    cout << "Set histogram: " << endl;
+    histogram_report(set_compare_counts_histogram);
+}
+
+
+// TODO: measure pointer density.
 int main() {
-    measure_compare_counts_random_insert();
-    //count_asymptotic_behavior_degenerate<10>();
+    measure_sorted_inserts();
+    measure_sorted_reversed_inserts();
+    measure_random_dense_inserts();
 }
