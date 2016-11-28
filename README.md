@@ -1,11 +1,5 @@
 skiplist
 ========
+Mission: create a well-documented, tested, bench-marked, multi-threaded skiplist.
 
-Mission: create a high-performance concurrent skiplist that's consistent with C++ container standards.
-
-
-
-References
-==========
-
-http://goodliffe.blogspot.com/2011/12/skip-lists-c-stl-style-implementation.html
+Along the way, I hope to round out a lot more of my software engineering trivia: playing around with Makefiles, unit testing, design patterns, comments, linters, and so on.
