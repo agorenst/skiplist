@@ -37,33 +37,15 @@ using namespace std;
 
 #include <random>
 
+namespace skiplist_internal {
+    extern std::random_device rd;
+    extern std::mt19937 gen;
+    extern std::uniform_int_distribution<> dis;
+    int good_height_generator();
+};
 
 // Setting "sane" defaults to save typing -- will refine defaults
 // as performance testing solidifies.
-namespace skiplist_internal {
-std::random_device rd;
-std::mt19937 gen(rd());
-std::uniform_int_distribution<> dis(0, 1 << 30);
-
-// From hacker's delight
-int ntz(unsigned int x) {
-    static_assert(sizeof(unsigned int) == 4, "Assuming 4-byte integers");
-    static_assert(CHAR_BIT == 8, "Assuming 8-bit bytes");
-    if (x == 0) { return 32; }
-    int n = 1;
-    if ((x & 0x0000FFFF) == 0) { n = n + 16; x >>= 16; }
-    if ((x & 0x000000FF) == 0) { n = n + 8; x >>= 8; }
-    if ((x & 0x0000000F) == 0) { n = n + 4; x >>= 4; }
-    if ((x & 0x00000003) == 0) { n = n + 2; x >>= 2; }
-    return n - (x & 1);
-}
-
-int good_height_generator() {
-    auto x = dis(gen);
-    return ntz(x)+1;
-}
-};
-
 template<typename T,
     // TODO: can max_height be a constexpr of generator.max()?
     int max_height = 32,
@@ -128,48 +110,28 @@ public:
         node(slice s, Args&&... args): s(s), e{std::forward<Args>(args)...} {}
     };
 
-    template<typename Iter>
-    int find_i_to_fwd(const T& E, Iter first, Iter last) {
-        return std::upper_bound(first, last, E, [this](const T& e, node* n) {
-            return !(n && compare(n->e, e));
-        }) - first;
-    }
+private:
 
     // This is the core lookup routine: find the "slice"
     // that would be the predecessors for element e.
     slice slice_preceeding(const T& e, const size_type height = max_height) {
         slice result{height, nullptr};
         node* prev_node = nullptr;
+        node* next = nullptr;
         slice* prev_nexts = &heads;
+        int i = height - 1;
 
-        // TODO
-        // Code can definitely be refactored into a better loop,
-        // I'm sure, but for now I'm focused on reducing the number
-        // of comparisons.
-        for (int i = height - 1; i >= 0; ) {
-            while (i >= 0 && !(*prev_nexts)[i]) {
+        for (;;) {
+            while ((*prev_nexts)[i] == next) {
                 result[i--] = prev_node;
+                if (i < 0) { return result; }
             }
-            if (i < 0) { break; }
-
-            node* next = (*prev_nexts)[i];
-            ASSERT(next);
+            next = (*prev_nexts)[i];
             while (next && compare(next->e, e)) {
                 prev_node = next;
                 prev_nexts = &(next->s);
                 next = (*prev_nexts)[i];
             }
-
-            // This is newer reasoning, attempting to reduce
-            // the number of compares. Scoot down the nexts list until
-            // we actually look at a new element.
-            ASSERT((*prev_nexts)[i] == next);
-            ASSERT(!next || !compare((*prev_nexts)[i]->e, e));
-            while (i >= 0 && (*prev_nexts)[i] == next) {
-                ASSERT(!next || !compare((*prev_nexts)[i]->e, e));
-                result[i--] = prev_node;
-            }
-            if (i < 0) { break; }
         }
         return result;
     }
@@ -234,37 +196,41 @@ public:
         return counter;
     }
     void dbg_print() {
-        for (int height = max_height-1; height >= 0; --height) {
-            if (heads[height]) {
-                if (height > 9) {
-                    printf("[%d]--", height);
-                }
-                else {
-                    printf("[0%d]--", height);
-                }
-            }
-            else { continue ;} // don't print a height that was never reached...?
-            node* n = heads[0];
-            while (n) {
-                if (n->s.size() > height) {
-                    if (n->e > 9) {
-                        printf("[%d]", n->e);
-                    }
-                    else {
-                        printf("[0%d]", n->e);
-                    }
-                }
-                else {
-                    printf("----");
-                }
-                printf("--");
-                n = n->s[0];
-            }
-            printf("|\n");
-        }
+        //for (int height = max_height-1; height >= 0; --height) {
+        //    if (heads[height]) {
+        //        if (height > 9) {
+        //            printf("[%d]--", height);
+        //        }
+        //        else {
+        //            printf("[0%d]--", height);
+        //        }
+        //    }
+        //    else { continue ;} // don't print a height that was never reached...?
+        //    node* n = heads[0];
+        //    while (n) {
+        //        if (n->s.size() > height) {
+        //            if (n->e > 9) {
+        //                printf("[%d]", n->e.x);
+        //            }
+        //            else {
+        //                printf("[0%d]", n->e.x);
+        //            }
+        //        }
+        //        else {
+        //            printf("----");
+        //        }
+        //        printf("--");
+        //        n = n->s[0];
+        //    }
+        //    printf("|\n");
+        //}
     }
     
     skip_list() = default;
+    // TODO: simply copy nodes directly?
+    skip_list(const skip_list& that) {
+        insert(std::begin(that), std::end(that));
+    }
 
     template<class ITER>
     skip_list(ITER start, ITER finish) {
@@ -302,7 +268,8 @@ public:
     }
     skip_list& operator=(std::initializer_list<T> l) {
         this->clear();
-        insert(begin(l), end(l));
+        insert(std::begin(l), std::end(l));
+        return *this;
     }
 
     // Very basic destructor.
@@ -353,11 +320,8 @@ public:
         if (predecessors[0]) {
             return predecessors[0]->s[0] && !compare(value, predecessors[0]->s[0]->e);
         }
-        //if (predecessors[0]) {
-        //    return predecessors[0]->s[0] && are_equal(predecessors[0]->s[0]->e, value);
-        //}
         else {
-            return heads[0] && !compare(value, heads[0]->e);//are_equal(heads[0]->e, value);
+            return heads[0] && !compare(value, heads[0]->e);
         }
     }
 
@@ -448,57 +412,20 @@ public:
 
     void erase(const T& e) {
         slice to_stitch{slice_preceeding(e)};
-        node* pre_to_del = to_stitch[0];
-
-        // either equal to or less than heads[0]->e
-        if (!pre_to_del && heads[0]) {
-            // less than
-            if (compare(e, heads[0]->e)) {
-                return;
-            }
-            // equal to
-            else if (!compare(heads[0]->e, e)) {
-                node* to_del = heads[0];
-
-                for (int i = 0; i < max_height; ++i) {
-                    if (heads[i] == to_del) {
-                        heads[i] = heads[i]->s[i];
-                    }
-                }
-                delete to_del;
-                ASSERT(check_simple_invariants());
-                return;
-            }
-        }
-        // if the element is in the list other than the head
-        else if (pre_to_del && pre_to_del->s[0] && are_equal(pre_to_del->s[0]->e, e)) {
-            node* to_del = pre_to_del->s[0];
-            for (int i = 0; i < max_height; ++i) {
-                if (i < to_del->s.size()) {
-                    ASSERT(to_stitch[i] || heads[i]);
-                    ASSERT(heads[i] == to_del || to_stitch[i]->s[i] == to_del);
-                    if (to_stitch[i]) {
-                        ASSERT(to_stitch[i]->s[i]->s[i] == to_del->s[i]);
-                    }
-                    else {
-                        ASSERT(heads[i]->s[i] == to_del->s[i]);
-                    }
-                }
-                else {
-                    ASSERT(to_stitch[i] != to_del);
-                }
+        if (preds_have_e(to_stitch, e)) {
+            node* to_del = to_stitch[0] ? to_stitch[0]->s[0] : heads[0];
+            for (int i = max_height - 1; i >= 0; i--) {
                 if (to_stitch[i] && to_stitch[i]->s[i] == to_del) {
-                    to_stitch[i]->s[i] = to_stitch[i]->s[i]->s[i];
+                    ASSERT(to_stitch[i]->s[i] == to_del);
+                    to_stitch[i]->s[i] = to_del->s[i];
                 }
                 else if (heads[i] && heads[i] == to_del) {
+                    ASSERT(heads[i] == to_del);
                     heads[i] = heads[i]->s[i];
                 }
             }
             delete to_del;
-            ASSERT(check_simple_invariants());
-            return;
         }
-        // otherwise, it's not here.
         return;
     }
     

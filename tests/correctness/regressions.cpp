@@ -1,4 +1,3 @@
-#define CATCH_CONFIG_MAIN
 #include "Catch/single_include/catch.hpp"
 
 //#define LOGGING_INFO
@@ -14,36 +13,13 @@
 
 using namespace std;
 
-std::random_device rd;
-std::mt19937 gen(rd());
-std::uniform_int_distribution<> dis(0, 1 << 30);
-
-// From hacker's delight
-int ntz(unsigned int x) {
-    static_assert(sizeof(unsigned int) == 4, "Assuming 4-byte integers");
-    if (x == 0) { return 32; }
-    int n = 1;
-    if ((x & 0x0000FFFF) == 0) { n = n + 16; x >>= 16; }
-    if ((x & 0x000000FF) == 0) { n = n + 8; x >>= 8; }
-    if ((x & 0x0000000F) == 0) { n = n + 4; x >>= 4; }
-    if ((x & 0x00000003) == 0) { n = n + 2; x >>= 2; }
-    return n - (x & 1);
-}
-
-int good_height_generator() {
-    return ntz(dis(gen))-1;
-}
-
-int empty() { return 0; }
-
-
 int error_input_seq[] = {4 , 1 , 5 , 0 , 16 , 1 , 10 , 1 , 1 , 6 , 11 , 0 , 1 , 0 , 6 , 1 , 10 , 1 , 16 , 0 };
 // Examining a benchmark, valgrind detected a memory leak. We were really
 // screwing up a few fundamental things, including allowing the insertion
 // of elements at the beginning of the list even if they were equal,
 // and other things like that...
 TEST_CASE("flushing out memory leak") {
-    skip_list<int, 32, good_height_generator> l;
+    skip_list<int> l;
     set<int> s;
     for (int i = 0; i < 10; ++i) {
         int value = error_input_seq[2*i];
@@ -59,7 +35,7 @@ TEST_CASE("flushing out memory leak") {
 // but I think it was a similar one in the vein of the next
 // test case.
 TEST_CASE("flushing out segfault") {
-    skip_list<int, 32, good_height_generator> l;
+    skip_list<int> l;
     l.insert(8,1);
     l.insert(6,3);
     l.insert(12,1);
@@ -80,7 +56,7 @@ TEST_CASE("flushing out segfault") {
 // We neglected to do that here, so after removing 7 we
 // left heads[2] still pointing to that node.
 TEST_CASE("new segfault found via random_test") {
-    skip_list<int, 32, good_height_generator> l;
+    skip_list<int> l;
     set<int> s;
     l.insert(0,2);
     l.insert(7,3);
@@ -95,7 +71,7 @@ TEST_CASE("new segfault found via random_test") {
 // I got caught in negating the <, <> vs equality, etc.
 // A simple error in "erase", yet again...
 TEST_CASE("assertion failure after changing to Compare") {
-    skip_list<int, 32, good_height_generator> l;
+    skip_list<int> l;
     set<int> s;
     int i = 0;
     int latest_error[] = { 0, 2, 1,     0, 1, -1,     -999};
@@ -146,7 +122,7 @@ TEST_CASE("invariant violation") {
         2, 2, -1,
         15, 1, 1,
         -999};
-    skip_list<int, 32, good_height_generator> l;
+    skip_list<int> l;
     set<int> s;
     int i = 0;
     while(invariant_violation[i] != -999) {

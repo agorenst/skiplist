@@ -1,16 +1,26 @@
 CXX = clang++
-CXXFLAGS = -std=c++14 -Wall -O3 -g
+CXXINCLUDE = -I$(realpath ./../) -I$(realpath ./../src) -I$(realpath .)
+CXXFLAGS = -std=c++14 -Wall -O3 -g $(CXXINCLUDE)
+VPATH = $(realpath ./../src)
 
-all: set_modifiers
+export CXX
+export CXXFLAGS
+export VPATH
 
-measure_theoretical_claims: measure_theoretical_claims.cpp ./../skiplist.h
-	$(CXX) $(CXXFLAGS) -I./../ measure_theoretical_claims.cpp -o measure_theoretical_claims
-measure_performance: measure_performance.cpp ./../skiplist.h
-	$(CXX) $(CXXFLAGS) -I./../ measure_performance.cpp -o measure_performance
-correctness_checking_rnd: correctness_checking_rnd.cpp ./../skiplist.h
-	$(CXX) $(CXXFLAGS) -I./../ correctness_checking_rnd.cpp -o correctness_checking_rnd
-set_modifiers: set_modifiers.cpp ./../skiplist.h
-	$(CXX) $(CXXFLAGS) -I./../ set_modifiers.cpp -o set_modifiers
+suites = performance correctness interface
+# see subdir discussion after https://www.gnu.org/software/make/manual/make.html#Phony-Targets
+.PHONY: all clean $(suites)
+
+all: $(suites)
+
+$(suites):
+	$(MAKE) -j 4 -C $@
+
+check: correctness interface
+	$(MAKE) -j 4 check -C correctness
+	$(MAKE) -j 4 check -C interface
 
 clean:
-	rm -r -f correctness_checking_rnd set_modifiers measure_performance measure_theoretical_claims
+	$(MAKE) clean -C correctness
+	$(MAKE) clean -C interface
+	$(MAKE) clean -C performance

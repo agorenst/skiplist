@@ -209,7 +209,7 @@ void measure_sorted_reversed_inserts() {
 }
 
 void measure_random_dense_inserts() {
-    skip_list<NoisyClass> l;
+    skip_list<NoisyClass,10> l;
     std::set<NoisyClass> s;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<> input_box(0, 100);
@@ -238,10 +238,43 @@ void measure_random_dense_inserts() {
     histogram_report(set_compare_counts_histogram);
 }
 
+void measure_random_sparse_inserts() {
+    skip_list<NoisyClass> l;
+    std::set<NoisyClass> s;
+    std::mt19937 gen(rd());
+    const int N = 1000000;
+    std::uniform_int_distribution<> input_box(0, N);
+    std::map<int,int> skiplist_compare_counts_histogram;
+    std::map<int,int> set_compare_counts_histogram;
+    NoisyClass::reset_state();
+    for (int i = 0; i < N; i++) {
+        l.emplace(input_box(gen));
+        skiplist_compare_counts_histogram[NoisyClass::LT_COUNTER]++;
+        NoisyClass::reset_state();
+
+        s.emplace(input_box(gen));
+        set_compare_counts_histogram[NoisyClass::LT_COUNTER]++;
+        NoisyClass::reset_state();
+    }
+
+    auto tm = l.tree_measure();
+    cout << "tree measure: ";
+    for_each(begin(tm), end(tm), [](int x) {
+        cout << x << " ";
+    });
+    cout << endl;
+    cout << "Skiplist histogram: " << endl;
+    histogram_report(skiplist_compare_counts_histogram);
+    cout << "Set histogram: " << endl;
+    histogram_report(set_compare_counts_histogram);
+    //l.dbg_print();
+}
+
 
 // TODO: measure pointer density.
 int main() {
     measure_sorted_inserts();
     measure_sorted_reversed_inserts();
     measure_random_dense_inserts();
+    measure_random_sparse_inserts();
 }

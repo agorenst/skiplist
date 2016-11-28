@@ -1,4 +1,3 @@
-#define CATCH_CONFIG_MAIN
 #include "Catch/single_include/catch.hpp"
 
 #include <algorithm>
@@ -29,7 +28,7 @@
 
 using namespace std;
 
-int empty() { return 0; }
+int empty() { return 1; }
 
 TEST_CASE("constructor()") {
     skip_list<int> l;
@@ -38,7 +37,7 @@ TEST_CASE("constructor(InputIn first, InputIn last)") {
     {
     int basic_iterators[] = {9,10,2,5,4};
     skip_list<int, 12, empty> l(begin(basic_iterators), end(basic_iterators));
-
+    
     std::sort(begin(basic_iterators), end(basic_iterators));
     REQUIRE(std::equal(begin(basic_iterators), end(basic_iterators),
                        begin(l), end(l)));
