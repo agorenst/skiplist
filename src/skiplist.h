@@ -1,4 +1,5 @@
-#pragma once
+#ifndef SKIPLIST_H
+#define SKIPLIST_H
 
 #include <vector>
 #include <algorithm>
@@ -8,35 +9,34 @@
 #include <iterator>
 #include <climits>
 
-
-// Are we compiling in logging mode?
-#ifdef LOGGING_INFO
-#define LOG_CONDITIONAL(C, A) if (C) { A; }
-#define LOG_HEIGHT_TRAVERSED
-#define LOG_NODE_STEP LOG_node_stepped()
-#define LOG_ELT_COMPARISON LOG_elt_comparison()
-#else
-#define LOG_CONDITIONAL(C, A)
-#define LOG_HEIGHT_TRAVERSED
-#define LOG_NODE_STEP
-#define LOG_ELT_COMPARISON
-#endif
-
-// Are we compiling in debug mode? (with asserts)
-#ifdef SKIPLIST_DEBUG
-#define ASSERT(x) assert(x)
-#define DBG_PRINT(...) printf(__VA_ARGS__);
-#else
-#define ASSERT(x)
-#define DBG_PRINT(...)
-#endif
-
-#include <iostream>
+// need to patch this up.
 using namespace std;
 
 
-#include <random>
+// This is used for tracing calls and the like.
+// May be extended to use some logging mechanism in
+// unit tests.
+#ifdef SKIPLIST_TRACE
+#include <string>
+struct invocation_tracer {
+    std::string funcname;
+    explicit invocation_tracer(std::string&& s): funcname(s) {
+        printf("entering %s\n", funcname.c_str());
+    }
+    ~invocation_tracer() {
+        printf("leaving %s\n", funcname.c_str());
+    }
+};
+#define SL_TRACE_CALL invocation_tracer do_trace(__PRETTY_FUNCTION__);
+#else
+#define SL_TRACE_CALL
+#endif
 
+
+
+// TODO: I really have to make sure we don't have to link to a obj file
+// in order to use a skiplist. Shove this state elsewhere (constructor parameter?)
+#include <random>
 namespace skiplist_internal {
     extern std::random_device rd;
     extern std::mt19937 gen;
@@ -46,39 +46,79 @@ namespace skiplist_internal {
 
 // Setting "sane" defaults to save typing -- will refine defaults
 // as performance testing solidifies.
+// TODO: NOEXCEPT
 template<typename T,
     // TODO: can max_height be a constexpr of generator.max()?
     int max_height = 32,
     int (*gen)() = skiplist_internal::good_height_generator,
     class Compare = std::less<T>,
     class Allocator = std::allocator<T>>
+
 class skip_list {
-    private:
+// Run all of our asserts.
+#ifdef SKIPLIST_CORRECTNESS
+    // This helps make sure that our invariants
+    // are maintained in non-const methods.
+struct invariant_checker {
+    typedef skip_list<T, max_height, gen, Compare, Allocator> parent;
+    const parent& mine;
+    explicit invariant_checker(const parent& p): mine(p) {
+        assert(mine.check_simple_invariants());
+    }
+    ~invariant_checker() {
+        assert(mine.check_simple_invariants());
+    }
+};
+#define ASSERT(x) assert(x)
+#define INVARIANT_GUARD invariant_checker do_invariants(*this);
+#else
+#define ASSERT(x)
+#define INVARIANT_GUARD
+#endif
+
+// This is used for keeping track of measurement
+// counters for performance.
+// NOTE NOTE NOTE: we don't swap, move, copy, etc. these fields.
+#ifdef SKIPLIST_MEASURES
+public:
+mutable int elt_comparison = 0;
+mutable int slice_preceeding_iteration = 0;
+mutable int same_ptr_cmp = 0;
+mutable int node_step = 0;
+mutable int equality_cmp = 0;
+mutable int preds_have_e_counter = 0;
+mutable int ptr_creation = 0;
+#define ELT_COMPARISON elt_comparison++
+#define SLICE_PRECEEDING_ITERATION slice_preceeding_iteration++
+#define SAME_PTR_CMP same_ptr_cmp++
+#define NODE_STEP node_step++
+#define EQUALITY_CMP equality_cmp++
+#define PREDS_HAVE_E preds_have_e_counter++
+#define PTR_CREATION(x) ptr_creation += x
+private:
+#else
+#define ELT_COMPARISON
+#define SLICE_PRECEEDING_ITERATION
+#define SAME_PTR_CMP
+#define NODE_STEP
+#define EQUALITY_CMP
+#define PREDS_HAVE_E
+#define PTR_CREATION(x)
+#endif
+
+private:
     struct node;
     typedef node* pnode;
 
     // TODO: Allocation -- maybe put a pool in front?
     typedef std::vector<pnode, Allocator> slice;
 
+
+
     // the only field, and we initialize it.
     slice heads{max_height, nullptr};
 
-#ifdef LOGGING_INFO
-    // Logging information to track performance.
-    // Currently single-threaded...
-    int node_stepped = 0;
-    mutable int elt_compared = 0;
-
-    void LOG_node_stepped() { node_stepped++; }
-    void LOG_elt_comparison() const { elt_compared++; }
 public:
-    int LOG_get_node_stepped() const { return node_stepped; }
-    void LOG_reset_node_stepped() { node_stepped = 0; }
-    int LOG_get_elt_comparisons() const { return elt_compared; }
-    void LOG_reset_elt_comparisons() { elt_compared = 0; }
-#endif
-
-    public:
     typedef T                                               key_type;
     typedef T                                               value_type;
     typedef std::size_t                                     size_type;
@@ -93,20 +133,7 @@ public:
     struct iterator;
     struct const_iterator;
 
-    private:
-
-    // Wait, how do data structures actually use allocators?
-    public:
-    allocator_type get_allocator() const { return allocator_type(); }
-    private:
-    bool compare(const value_type& t1, const value_type& t2) const {
-        // TODO: figure out if comp is supposed to be a field, or have
-        // other restrictions.
-        value_compare comp;
-        LOG_ELT_COMPARISON;
-        return comp(t1, t2);
-    }
-
+private:
     struct node {
         slice s;
         value_type e;
@@ -114,31 +141,39 @@ public:
         template<class... Args>
         node(slice s, Args&&... args): s(s), e{std::forward<Args>(args)...} {}
     };
-
-private:
-
+    bool compare(const value_type& t1, const value_type& t2) const {
+        // TODO: figure out if comp is supposed to be a field, or have
+        // other restrictions.
+        value_compare comp;
+        ELT_COMPARISON;
+        return comp(t1, t2);
+    }
     // This is the core lookup routine: find the "slice"
     // that would be the predecessors for element e.
-    slice slice_preceeding(const T& e, const size_type height = max_height) {
-        slice result{height, nullptr};
+    slice slice_preceeding(const T& e) const {
+        SL_TRACE_CALL;
+
+        slice result{max_height, nullptr};
         node* prev_node = nullptr;
         node* next = nullptr;
-        slice* prev_nexts = &heads;
-        int i = height - 1;
+        const slice* prev_nexts = &heads;
+        int i = max_height - 1;
 
         for (;;) {
+            SLICE_PRECEEDING_ITERATION;
             while ((*prev_nexts)[i] == next) {
+                SAME_PTR_CMP;
                 result[i--] = prev_node;
                 if (i < 0) { return result; }
             }
             next = (*prev_nexts)[i];
             while (next && compare(next->e, e)) {
+                NODE_STEP;
                 prev_node = next;
                 prev_nexts = &(next->s);
                 next = (*prev_nexts)[i];
             }
         }
-        return result;
     }
 
     int generate_height() const {
@@ -190,116 +225,8 @@ private:
         return true;
     }
 
-
-public:
-    std::vector<int> tree_measure() {
-        vector<int> counter(max_height,0);
-        for (auto it = this->begin(); it != this->end(); ++it) {
-            auto n = it.mynode;
-            counter[n->s.size()]++;
-        }
-        return counter;
-    }
-    void dbg_print() {
-        //for (int height = max_height-1; height >= 0; --height) {
-        //    if (heads[height]) {
-        //        if (height > 9) {
-        //            printf("[%d]--", height);
-        //        }
-        //        else {
-        //            printf("[0%d]--", height);
-        //        }
-        //    }
-        //    else { continue ;} // don't print a height that was never reached...?
-        //    node* n = heads[0];
-        //    while (n) {
-        //        if (n->s.size() > height) {
-        //            if (n->e > 9) {
-        //                printf("[%d]", n->e.x);
-        //            }
-        //            else {
-        //                printf("[0%d]", n->e.x);
-        //            }
-        //        }
-        //        else {
-        //            printf("----");
-        //        }
-        //        printf("--");
-        //        n = n->s[0];
-        //    }
-        //    printf("|\n");
-        //}
-    }
-    
-    skip_list() = default;
-    // TODO: simply copy nodes directly?
-    skip_list(const skip_list& that) {
-        insert(std::begin(that), std::end(that));
-    }
-
-    template<class ITER>
-    skip_list(ITER start, ITER finish) {
-        for (; start != finish; ++start) {
-            insert(*start);
-        }
-    }
-
-    skip_list(const std::initializer_list<T>& l) {
-        for (auto&& x : l) {
-            insert(x);
-        }
-    }
-
-    ~skip_list() {
-        clear();
-    }
-
-    skip_list& operator=(const skip_list& that) {
-        if (this == &that) { return *this; }
-        // for now this is very inefficient, but we'll do this.
-        this->clear();
-        this->insert(std::begin(that), std::end(that));
-        return *this;
-    }
-    skip_list& operator=(skip_list&& that) {
-        // is that right? I don't think this is possible...?
-        if (this == &that) { return *this; }
-        this->clear();
-        this->heads = that.heads;
-        // I have to do this, otherwise if it gets destructed
-        // it will remove the memory out from under us.
-        std::fill(std::begin(that.heads), std::end(that.heads), nullptr);
-        return *this;
-    }
-    skip_list& operator=(std::initializer_list<T> l) {
-        this->clear();
-        insert(std::begin(l), std::end(l));
-        return *this;
-    }
-
-    // Very basic destructor.
-    void clear() {
-        node* curr = heads[0];
-        while (curr) {
-            auto to_del = curr;
-            curr = curr->s[0];
-            delete to_del;
-        }
-        std::fill(std::begin(heads), std::end(heads), nullptr);
-    }
-
-    // for now we're just bailing on using the "hint"
-    iterator insert(const_iterator hint, const value_type& value) {
-        auto iter_and_flag = insert(value);
-        return std::get<0>(iter_and_flag);
-    }
-    iterator insert(const_iterator hint, value_type&& value) {
-        auto iter_and_flag = insert(value);
-        return std::get<0>(iter_and_flag);
-    }
-
-
     void stitch_up_node(const slice& predecessors, node* new_node) {
+        INVARIANT_GUARD;
         const int new_height = new_node->s.size();
         for (int i = 0; i < new_height; ++i) {
             if (predecessors[i] == nullptr) {
@@ -311,17 +238,17 @@ public:
                 predecessors[i]->s[i] = new_node;
             }
         }
-        ASSERT(check_simple_invariants());
     }
 
     bool are_equal(const value_type& v1, const value_type& v2) const {
+        EQUALITY_CMP;
         if (!compare(v1, v2)) {
             return !compare(v2, v1);
         }
         return false;
     }
-
     bool preds_have_e(const slice& predecessors, const value_type& value) const {
+        PREDS_HAVE_E;
         if (predecessors[0]) {
             return predecessors[0]->s[0] && !compare(value, predecessors[0]->s[0]->e);
         }
@@ -329,6 +256,156 @@ public:
             return heads[0] && !compare(value, heads[0]->e);
         }
     }
+
+    
+public:
+    std::vector<int> tree_measure() const {
+        vector<int> counter(max_height,0);
+        for (auto it = this->begin(); it != this->end(); ++it) {
+            auto n = it.mynode;
+            counter[n->s.size()]++;
+        }
+        return counter;
+    }
+    void dbg_print() {}
+
+
+//////////////////////////////////////////////////////////////////////////
+// Main set interface defined below.
+//////////////////////////////////////////////////////////////////////////
+    skip_list() : skip_list(Compare()) {
+        INVARIANT_GUARD;
+        SL_TRACE_CALL;
+    }
+    explicit skip_list(const Compare comp, const Allocator& alloc = Allocator()) {
+        INVARIANT_GUARD;
+        SL_TRACE_CALL;
+    }
+    template<class InputIt>
+    skip_list(InputIt first, InputIt last,
+              const Compare& comp = Compare(),
+              const Allocator& alloc = Allocator()) {
+        INVARIANT_GUARD;
+        SL_TRACE_CALL;
+        for (; first != last; ++first) {
+            insert(*first);
+        }
+    }
+
+    // TODO: simply copy nodes directly?
+    skip_list(const skip_list& that) {
+        INVARIANT_GUARD;
+        SL_TRACE_CALL;
+        insert(std::begin(that), std::end(that));
+    }
+    skip_list(const skip_list& that, const Allocator& alloc) {
+        INVARIANT_GUARD;
+        SL_TRACE_CALL;
+        insert(std::begin(that), std::end(that));
+    }
+
+    skip_list(skip_list&& that) {
+        INVARIANT_GUARD;
+        SL_TRACE_CALL;
+        // this should invoke the operator=(skip_list&& that) method.
+        (*this) = that;
+    }
+    skip_list(skip_list&& that, const Allocator& alloc) {
+        INVARIANT_GUARD;
+        SL_TRACE_CALL;
+        // this should invoke the operator=(skip_list&& that) method.
+        (*this) = that;
+    }
+
+
+    skip_list(const std::initializer_list<T>& l,
+              const Compare& comp = Compare(),
+              const Allocator& alloc = Allocator()) {
+        INVARIANT_GUARD;
+        SL_TRACE_CALL;
+        for (auto&& x : l) {
+            insert(x);
+        }
+    }
+    skip_list(const std::initializer_list<T>& l,
+              const Allocator& alloc) : skip_list(l, Compare(), alloc) {
+        INVARIANT_GUARD;
+        SL_TRACE_CALL;
+        for (auto&& x : l) {
+            insert(x);
+        }
+    }
+
+    ~skip_list() {
+        SL_TRACE_CALL;
+        clear();
+    }
+
+    skip_list& operator=(const skip_list& that) {
+        SL_TRACE_CALL;
+        INVARIANT_GUARD;
+        if (this == &that) { return *this; }
+        // for now this is very inefficient, but we'll do this.
+        this->clear();
+        this->insert(std::begin(that), std::end(that));
+        return *this;
+    }
+    skip_list& operator=(skip_list&& that) {
+        SL_TRACE_CALL;
+        INVARIANT_GUARD;
+        // TODO: Resolve this confusion I have.
+        // is that right? I don't think this is possible...?
+        if (this == &that) { return *this; }
+        this->clear();
+        this->heads = that.heads;
+        // I have to do this, otherwise if it gets destructed
+        // it will remove the memory out from under us.
+        std::fill(std::begin(that.heads), std::end(that.heads), nullptr);
+        return *this;
+    }
+    skip_list& operator=(std::initializer_list<T> l) {
+        SL_TRACE_CALL;
+        INVARIANT_GUARD;
+        this->clear();
+        insert(std::begin(l), std::end(l));
+        return *this;
+    }
+
+    // Wait, how do data structures actually use allocators?
+    allocator_type get_allocator() const {
+        SL_TRACE_CALL;
+        return allocator_type();
+    }
+
+    // Very basic destructor.
+    void clear() {
+        INVARIANT_GUARD;
+        SL_TRACE_CALL;
+        node* curr = heads[0];
+        while (curr) {
+            auto to_del = curr;
+            curr = curr->s[0];
+            delete to_del;
+        }
+        std::fill(std::begin(heads), std::end(heads), nullptr);
+    }
+
+    // TODO: use hint to our advantage.
+    // See also: emplace_hint.
+    iterator insert(const_iterator hint, const value_type& value) {
+        INVARIANT_GUARD;
+        SL_TRACE_CALL;
+        auto iter_and_flag = insert(value);
+        return std::get<0>(iter_and_flag);
+    }
+    iterator insert(const_iterator hint, value_type&& value) {
+        INVARIANT_GUARD;
+        SL_TRACE_CALL;
+        auto iter_and_flag = insert(value);
+        return std::get<0>(iter_and_flag);
+    }
+
+
 
     // TODO: Share code between the different inserts and emplace.
     // I'm deliberately waiting because I don't know all the design considerations
@@ -338,13 +415,16 @@ public:
     // TODO: Logging (to help unit tests verify that we have the coverage we expect)
     // TODO: Watch for multiset functionality.
 
-    std::pair<iterator,bool> insert(const value_type& value, const int height) {
+    std::pair<iterator,bool> insert(const value_type& value, int height) {
+        INVARIANT_GUARD;
+        SL_TRACE_CALL;
         slice predecessors{slice_preceeding(value)};
         if (preds_have_e(predecessors, value)) {
             if (predecessors[0]) { return { predecessors[0]->s[0], false }; }
             else { return { heads[0], false }; }
         }
         int new_height = height;
+        PTR_CREATION(new_height);
         slice new_slice(new_height, nullptr);
         auto new_node = new node{new_slice, value};
 
@@ -353,6 +433,8 @@ public:
     }
 
     std::pair<iterator,bool> insert(value_type&& value) {
+        INVARIANT_GUARD;
+        SL_TRACE_CALL;
         //printf("std::pair<iterator,bool> insert(value_type&& value)\n");
         slice predecessors{slice_preceeding(value)};
         if (preds_have_e(predecessors, value)) {
@@ -361,6 +443,7 @@ public:
         }
         int new_height = generate_height();
         slice new_slice(new_height, nullptr);
+        PTR_CREATION(new_height);
         auto new_node = new node{new_slice, std::move(value)};
 
         stitch_up_node(predecessors, new_node);
@@ -368,6 +451,8 @@ public:
     }
 
     std::pair<iterator,bool> insert(const value_type& value) {
+        INVARIANT_GUARD;
+        SL_TRACE_CALL;
         //printf("std::pair<iterator,bool> insert(const value_type& value)\n");
         slice predecessors{slice_preceeding(value)};
         if (preds_have_e(predecessors, value)) {
@@ -376,6 +461,7 @@ public:
         }
 
         int new_height = generate_height();
+        PTR_CREATION(new_height);
         slice new_slice(new_height, nullptr);
         auto new_node = new node{new_slice, value};
 
@@ -383,8 +469,28 @@ public:
         return {new_node, true};
     }
 
+    void insert(std::initializer_list<value_type> ilist) {
+        SL_TRACE_CALL;
+        INVARIANT_GUARD;
+        insert(std::begin(ilist), std::end(ilist));
+    }
+
+    template<typename InputIt>
+    void insert(InputIt first, InputIt last) {
+        SL_TRACE_CALL;
+        INVARIANT_GUARD;
+        for (; first != last; first++) {
+            insert(*first);
+        }
+    }
+
+    // insert_return_type insert(node_type&& nh); // C++17
+    // iterator insert(const_iterator hint, node_type&& nh); // C++17
+
     template<class... Args>
     std::pair<iterator, bool> emplace(Args&&... args) {
+        SL_TRACE_CALL;
+        INVARIANT_GUARD;
         // We make the node first
         slice new_nexts{(size_t) generate_height(), nullptr};
         auto new_node = new node{new_nexts, args...};
@@ -396,28 +502,61 @@ public:
             else { return { heads[0], false }; }
         }
 
+        PTR_CREATION(new_nexts.size());
         stitch_up_node(predecessors, new_node);
         return {new_node, true};
     }
 
-    void insert(std::initializer_list<value_type> ilist) {
-        insert(std::begin(ilist), std::end(ilist));
-    }
+    // TODO: use hint to our advantage.
+    // For now we ignore the hint.
+    template<class... Args>
+    std::pair<iterator, bool> emplace_hint(const_iterator hint, Args&&... args) {
+        SL_TRACE_CALL;
+        INVARIANT_GUARD;
+        // We make the node first
+        slice new_nexts{(size_t) generate_height(), nullptr};
+        auto new_node = new node{new_nexts, args...};
 
-    template<typename InputIt>
-    void insert(InputIt first, InputIt last) {
-        for (; first != last; first++) {
-            insert(*first);
+        slice predecessors{slice_preceeding(new_node->e)};
+        if (preds_have_e(predecessors, new_node->e)) {
+            delete new_node;
+            if (predecessors[0]) { return { predecessors[0]->s[0], false }; }
+            else { return { heads[0], false }; }
         }
+
+        PTR_CREATION(new_nexts.size());
+        stitch_up_node(predecessors, new_node);
+        return {new_node, true};
     }
 
+    // TODO FOR ERASE: we're really depending on having a good
+    // iterator story here.
+    iterator erase(const_iterator pos) {
+        SL_TRACE_CALL;
+        INVARIANT_GUARD;
+        erase(*pos);
+        return end(); // TODO: NOT CORRECT, supposed to be std::next(pos);
+    }
+    iterator erase(iterator pos) {
+        SL_TRACE_CALL;
+        INVARIANT_GUARD;
+        erase(*pos);
+        return end(); // TODO: NOT CORRECT
+    }
+    iterator erase(const_iterator first, const_iterator last) {
+        SL_TRACE_CALL;
+        INVARIANT_GUARD;
+        for (; first != last; ++first) {
+            erase(*first);
+        }
+        return end(); // TODO: NOT CORRECT
+    }
 
-    // insert_return_type insert(node_type&& nh); // C++17
-    // iterator insert(const_iterator hint, node_type&& nh); // C++17
-
-    void erase(const T& e) {
-        slice to_stitch{slice_preceeding(e)};
-        if (preds_have_e(to_stitch, e)) {
+    size_type erase(const key_type& key) {
+        SL_TRACE_CALL;
+        INVARIANT_GUARD;
+        slice to_stitch{slice_preceeding(key)};
+        if (preds_have_e(to_stitch, key)) {
             node* to_del = to_stitch[0] ? to_stitch[0]->s[0] : heads[0];
             for (int i = max_height - 1; i >= 0; i--) {
                 if (to_stitch[i] && to_stitch[i]->s[i] == to_del) {
@@ -430,8 +569,16 @@ public:
                 }
             }
             delete to_del;
+            return 1;
         }
-        return;
+        return 0;
+    }
+
+    void swap(skip_list& other) {
+        SL_TRACE_CALL;
+        // TODO: I anticipate having more fields.
+        // Depends on allocator type!
+        std::swap(this->heads, other.heads);
     }
     
 // Definitely temporary, just getting things hooked up.
@@ -478,24 +625,71 @@ public:
     };
 
     iterator begin() {
+        SL_TRACE_CALL;
         return iterator{heads[0]};
     }
     iterator end() {
+        SL_TRACE_CALL;
         return iterator{nullptr};
     }
     const_iterator begin() const {
+        SL_TRACE_CALL;
         return const_iterator{heads[0]};
     }
     const_iterator end() const {
+        SL_TRACE_CALL;
+        return const_iterator{nullptr};
+    }
+    const_iterator cbegin() const {
+        SL_TRACE_CALL;
+        return const_iterator{heads[0]};
+    }
+    const_iterator cend() const {
+        SL_TRACE_CALL;
+        return const_iterator{nullptr};
+    }
+
+    // TODO: I DON'T ACTUALLY HAVE REVERSE ITERATORS.
+    // THESE ARE WRONG.
+    iterator rbegin() {
+        SL_TRACE_CALL;
+        return iterator{heads[0]};
+    }
+    iterator rend() {
+        SL_TRACE_CALL;
+        return iterator{nullptr};
+    }
+    const_iterator rbegin() const {
+        SL_TRACE_CALL;
+        return const_iterator{heads[0]};
+    }
+    const_iterator rend() const {
+        SL_TRACE_CALL;
+        return const_iterator{nullptr};
+    }
+    const_iterator crbegin() const {
+        SL_TRACE_CALL;
+        return const_iterator{heads[0]};
+    }
+    const_iterator crend() const {
+        SL_TRACE_CALL;
         return const_iterator{nullptr};
     }
 
     bool empty() const noexcept {
+        SL_TRACE_CALL;
         return !heads[0];
     }
     // very slow for now!
     size_type size() const noexcept {
+        SL_TRACE_CALL;
         return std::distance(begin(), end());
+    }
+    size_type max_size() const noexcept {
+        SL_TRACE_CALL;
+        // TODO: determine a better value. This is just a silly
+        // placeholder.
+        return 10000000;
     }
 
 
@@ -505,6 +699,7 @@ public:
     // TODO: Can't I share code by constructing a const_iterator
     // from iterator?
     iterator find(const T& e) {
+        SL_TRACE_CALL;
         int i = max_height - 1;
 
         // find the highest non-null element.
@@ -526,6 +721,7 @@ public:
         }
     }
     const_iterator find(const T& e) const {
+        SL_TRACE_CALL;
         int i = max_height - 1;
 
         // find the highest non-null element.
@@ -546,8 +742,86 @@ public:
             return end();
         }
     }
-    //template<class K> iterator find(const K& k);
-    //template<class K> const_iterator find(const K& k) const;
+
+    // TODO: NONE OF THESE ARE CORRECT
+    template<class K> iterator find(const K& k) {
+        SL_TRACE_CALL;
+        return this->end();
+    }
+    template<class K> const_iterator find(const K& k) const {
+        SL_TRACE_CALL;
+        return this->end();
+    }
+
+    // TODO: NONE OF THESE ARE CORRECT
+    std::pair<iterator,iterator> equal_range(const key_type& key) {
+        SL_TRACE_CALL;
+        return std::make_pair(begin(), begin());
+    }
+    std::pair<const_iterator,const_iterator> equal_range(const key_type& key) const {
+        SL_TRACE_CALL;
+        return std::make_pair(begin(), begin());
+    }
+    template<class K>
+    std::pair<iterator,iterator> equal_range(const K& x) {
+        SL_TRACE_CALL;
+        return std::make_pair(begin(), begin());
+    }
+    template<class K>
+    std::pair<const_iterator,const_iterator> equal_range(const K& x) const {
+        SL_TRACE_CALL;
+        return std::make_pair(begin(), begin());
+    }
+
+    // TODO: NONE OF THESE ARE CORRECT
+    iterator lower_bound(const key_type& key) {
+        SL_TRACE_CALL;
+        return end();
+    }
+    const_iterator lower_bound(const key_type& key) const {
+        SL_TRACE_CALL;
+        return end();
+    }
+    template<class K>
+    iterator lower_bound(const K& x) {
+        SL_TRACE_CALL;
+        return end();
+    }
+    template<class K>
+    const_iterator lower_bound(const K& x) const {
+        SL_TRACE_CALL;
+        return end();
+    }
+
+    // TODO: NONE OF THESE ARE CORRECT
+    iterator upper_bound(const key_type& key) {
+        SL_TRACE_CALL;
+        return end();
+    }
+    const_iterator upper_bound(const key_type& key) const {
+        SL_TRACE_CALL;
+        return end();
+    }
+    template<class K>
+    iterator upper_bound(const K& x) {
+        SL_TRACE_CALL;
+        return end();
+    }
+    template<class K>
+    const_iterator upper_bound(const K& x) const {
+        SL_TRACE_CALL;
+        return end();
+    }
+
+    // TODO: NONE OF THESE ARE CORRECT
+    key_compare key_comp() const {
+        SL_TRACE_CALL;
+        return end();
+    }
+    value_compare value_comp() const {
+        SL_TRACE_CALL;
+        return end();
+    }
 };
 
 template<class Key, int max_height, int(*gen)(),
@@ -620,3 +894,9 @@ bool operator>=(const skip_list<Key, max_height, gen, Compare, Alloc>& lhs,
                 const skip_list<Key, max_height, gen, Compare, Alloc>& rhs) {
     return !(lhs < rhs);
 }
+
+// TODO: Make this right...
+//template< class Key, class Compare, class Alloc >
+//void swap(...)
+
+#endif
