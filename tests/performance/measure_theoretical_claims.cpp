@@ -158,6 +158,8 @@ void measure_sorted_inserts() {
     std::map<int,int> skiplist_compare_counts_histogram;
     std::map<int,int> set_compare_counts_histogram;
     NoisyClass::reset_state();
+
+    l.ptr_creation = 0;
     for (int i = 0; i < 1000000; i++) {
         l.emplace(i);
         skiplist_compare_counts_histogram[NoisyClass::LT_COUNTER]++;
@@ -178,6 +180,7 @@ void measure_sorted_inserts() {
     histogram_report(skiplist_compare_counts_histogram);
     cout << "Set histogram: " << endl;
     histogram_report(set_compare_counts_histogram);
+    cout << "Number of pointers: " << l.ptr_creation << " size: " << l.size() << endl;
 }
 
 void measure_sorted_reversed_inserts() {
