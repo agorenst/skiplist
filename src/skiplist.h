@@ -94,6 +94,11 @@ public:
     struct const_iterator;
 
     private:
+
+    // Wait, how do data structures actually use allocators?
+    public:
+    allocator_type get_allocator() const { return allocator_type(); }
+    private:
     bool compare(const value_type& t1, const value_type& t2) const {
         // TODO: figure out if comp is supposed to be a field, or have
         // other restrictions.
