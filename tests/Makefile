@@ -7,7 +7,7 @@ export CXX
 export CXXFLAGS
 export VPATH
 
-suites = performance correctness interface
+suites = correctness performance interface
 # see subdir discussion after https://www.gnu.org/software/make/manual/make.html#Phony-Targets
 .PHONY: all clean $(suites)
 

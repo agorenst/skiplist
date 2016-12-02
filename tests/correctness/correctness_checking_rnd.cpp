@@ -16,6 +16,8 @@
 
 using namespace std;
 
+
+const int N = 10000;
 typedef skip_list<int> test_type;
 TEST_CASE("Test over small range") {
     auto seed = skiplist_internal::rd();
@@ -25,7 +27,7 @@ TEST_CASE("Test over small range") {
     const int M = 17;
     test_type l;
     set<int> s;
-    for (int i = 0; i < 10000000; ++i) {
+    for (int i = 0; i < N; ++i) {
         int value = skiplist_internal::dis(skiplist_internal::gen) % N;
         int height = std::min(30,skiplist_internal::good_height_generator())+1;
         int do_insert = skiplist_internal::dis(skiplist_internal::gen) % M;

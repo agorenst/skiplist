@@ -46,7 +46,7 @@ namespace skiplist_internal {
 
 // Setting "sane" defaults to save typing -- will refine defaults
 // as performance testing solidifies.
-// TODO: NOEXCEPT
+// TODO: NOEXCEPT decorations as needed.
 template<typename T,
     // TODO: can max_height be a constexpr of generator.max()?
     int max_height = 32,
@@ -70,6 +70,7 @@ struct invariant_checker {
     }
 };
 #define ASSERT(x) assert(x)
+// TODO: Make sure this invariant guard actuall checks things
 #define INVARIANT_GUARD invariant_checker do_invariants(*this);
 #else
 #define ASSERT(x)
@@ -85,6 +86,7 @@ mutable int elt_comparison = 0;
 mutable int slice_preceeding_iteration = 0;
 mutable int same_ptr_cmp = 0;
 mutable int node_step = 0;
+mutable int height_generated = 0;
 mutable int equality_cmp = 0;
 mutable int preds_have_e_counter = 0;
 mutable int ptr_creation = 0;
@@ -92,6 +94,7 @@ mutable int ptr_creation = 0;
 #define SLICE_PRECEEDING_ITERATION slice_preceeding_iteration++
 #define SAME_PTR_CMP same_ptr_cmp++
 #define NODE_STEP node_step++
+#define HEIGHT_GENERATED height_generated++;
 #define EQUALITY_CMP equality_cmp++
 #define PREDS_HAVE_E preds_have_e_counter++
 #define PTR_CREATION(x) ptr_creation += x
@@ -101,12 +104,14 @@ private:
 #define SLICE_PRECEEDING_ITERATION
 #define SAME_PTR_CMP
 #define NODE_STEP
+#define HEIGHT_GENERATED
 #define EQUALITY_CMP
 #define PREDS_HAVE_E
 #define PTR_CREATION(x)
 #endif
 
 private:
+    // private types and fields
     struct node;
     typedef node* pnode;
 
@@ -114,11 +119,10 @@ private:
     typedef std::vector<pnode, Allocator> slice;
 
 
-
-    // the only field, and we initialize it.
     slice heads{max_height, nullptr};
 
 public:
+    // public types
     typedef T                                               key_type;
     typedef T                                               value_type;
     typedef std::size_t                                     size_type;
@@ -177,6 +181,7 @@ private:
     }
 
     int generate_height() const {
+        HEIGHT_GENERATED;
         auto height = std::min(gen(), max_height-1);
         ASSERT(0 < height && height < max_height);
         return height;
@@ -262,7 +267,7 @@ public:
     std::vector<int> tree_measure() const {
         vector<int> counter(max_height,0);
         for (auto it = this->begin(); it != this->end(); ++it) {
-            auto n = it.mynode;
+            auto n = it.n;
             counter[n->s.size()]++;
         }
         return counter;
@@ -435,7 +440,6 @@ public:
     std::pair<iterator,bool> insert(value_type&& value) {
         INVARIANT_GUARD;
         SL_TRACE_CALL;
-        //printf("std::pair<iterator,bool> insert(value_type&& value)\n");
         slice predecessors{slice_preceeding(value)};
         if (preds_have_e(predecessors, value)) {
             if (predecessors[0]) { return { predecessors[0]->s[0], false }; }
@@ -453,7 +457,6 @@ public:
     std::pair<iterator,bool> insert(const value_type& value) {
         INVARIANT_GUARD;
         SL_TRACE_CALL;
-        //printf("std::pair<iterator,bool> insert(const value_type& value)\n");
         slice predecessors{slice_preceeding(value)};
         if (preds_have_e(predecessors, value)) {
             if (predecessors[0]) { return { predecessors[0]->s[0], false }; }
@@ -580,49 +583,111 @@ public:
         // Depends on allocator type!
         std::swap(this->heads, other.heads);
     }
-    
-// Definitely temporary, just getting things hooked up.
-    struct const_iterator : public std::iterator<std::forward_iterator_tag,
-                                    T,
-                                    int,
-                                    T*,
-                                    T&>{
-        const node* mynode;
-        const_iterator(node* n): mynode(n) {}
-        const_iterator& operator++() {
-            //printf("increment mynode from %p\n", mynode);
-            if (mynode) { mynode = mynode->s[0]; }
-            //printf("now: %p\n", mynode);
+
+    struct iterator {
+        typedef difference_type difference_type;
+        typedef value_type value_type;
+        typedef pointer pointer;
+        typedef reference reference;
+        typedef std::bidirectional_iterator_tag iterator_category;
+        node* n;
+        slice s;
+        public:
+        iterator() = default;
+        iterator(const iterator& it) = default;
+        iterator(iterator&& it) : n(it.n), s(std::move(it.s)) {}
+        iterator(node* n, slice s = slice()) : n(n), s(s) {}
+        // --it
+        iterator& operator--() {
             return *this;
         }
-        const_iterator& operator++(int) {
-            return ++(*this);
+        // it--
+        iterator operator--(int) {
+            auto tmp = iterator{*this};
+            return tmp;
         }
-        const T& operator*() { return mynode->e; }
-        const pointer operator->() { return &(mynode->e); }
-        bool operator==(const const_iterator& that) const { return mynode == that.mynode; }
-        bool operator!=(const const_iterator& that) const { return !((*this) == that); }
-    };
-// Definitely temporary, just getting things hooked up.
-    struct iterator : public std::iterator<std::forward_iterator_tag,
-                                    T,
-                                    int,
-                                    T*,
-                                    T&>{
-        node* mynode;
-        iterator(const const_iterator& that): mynode(that.mynode) {}
-        iterator(node* n): mynode(n) {}
+        // ++it
         iterator& operator++() {
-            //printf("increment mynode from %p\n", mynode);
-            if (mynode) { mynode = mynode->s[0]; }
-            //printf("now: %p\n", mynode);
+            if (n) { n = n->s[0]; }
             return *this;
         }
-        T& operator*() { return mynode->e; }
-        pointer operator->() { return &(mynode->e); }
-        bool operator==(const iterator& that) const { return mynode == that.mynode; }
-        bool operator!=(const iterator& that) const { return !((*this) == that); }
+        // it++
+        iterator operator++(int) {
+            auto tmp = iterator{*this};
+            ++(*this);
+            return tmp;
+        }
+        reference operator*() {
+            return n->e;
+        }
+        pointer operator->() {
+            return &(n->e);
+        }
+        bool operator==(const iterator& it) const {
+            return n == it.n;
+        }
+        bool operator!=(const iterator& it) const {
+            return n != it.n;
+        }
+        iterator& operator=(const iterator& it) {
+            n = it.n;
+            s = it.s;
+            return *this;
+        }
     };
+
+    struct const_iterator {
+        typedef difference_type difference_type;
+        typedef value_type value_type;
+        typedef pointer pointer;
+        typedef reference reference;
+        typedef std::bidirectional_iterator_tag iterator_category;
+        const node* n;
+        slice s;
+        public:
+        const_iterator() = default;
+        const_iterator(const const_iterator& it) = default;
+        const_iterator(const_iterator&& it) : n(it.n), s(std::move(it.s)) {}
+        const_iterator(node* n, slice s = slice()): n(n), s(s) {}
+        const_iterator(iterator& o): n(o.n), s(o.s) {}
+        // --it
+        const_iterator& operator--() {
+            return *this;
+        }
+        // it--
+        const_iterator operator--(int) {
+            auto tmp = const_iterator{*this};
+            return tmp;
+        }
+        // ++it
+        const_iterator& operator++() {
+            if (n) { n = n->s[0]; }
+            return *this;
+        }
+        // it++
+        const_iterator operator++(int) {
+            auto tmp = const_iterator{*this};
+            ++(*this);
+            return tmp;
+        }
+        const_reference operator*() {
+            return n->e;
+        }
+        pointer operator->() {
+            return &(n->e);
+        }
+        bool operator==(const const_iterator& it) const {
+            return n == it.n;
+        }
+        bool operator!=(const const_iterator& it) const {
+            return n != it.n;
+        }
+        const_iterator& operator=(const const_iterator& it) {
+            n = it.n;
+            s = it.s;
+        }
+    };
+
 
     iterator begin() {
         SL_TRACE_CALL;
@@ -649,31 +714,29 @@ public:
         return const_iterator{nullptr};
     }
 
-    // TODO: I DON'T ACTUALLY HAVE REVERSE ITERATORS.
-    // THESE ARE WRONG.
     iterator rbegin() {
         SL_TRACE_CALL;
-        return iterator{heads[0]};
+        return std::make_reverse_iterator(end());
     }
     iterator rend() {
         SL_TRACE_CALL;
-        return iterator{nullptr};
+        return std::make_reverse_iterator(begin());
     }
     const_iterator rbegin() const {
         SL_TRACE_CALL;
-        return const_iterator{heads[0]};
+        return std::make_reverse_iterator(end());
     }
     const_iterator rend() const {
         SL_TRACE_CALL;
-        return const_iterator{nullptr};
+        return std::make_reverse_iterator(begin());
     }
     const_iterator crbegin() const {
         SL_TRACE_CALL;
-        return const_iterator{heads[0]};
+        return std::make_reverse_iterator(end());
     }
     const_iterator crend() const {
         SL_TRACE_CALL;
-        return const_iterator{nullptr};
+        return std::make_reverse_iterator(begin());
     }
 
     bool empty() const noexcept {
@@ -721,26 +784,7 @@ public:
         }
     }
     const_iterator find(const T& e) const {
-        SL_TRACE_CALL;
-        int i = max_height - 1;
-
-        // find the highest non-null element.
-        while (i >= 0 && !heads[i]) { --i; };
-        if (i < 0) { return end(); }
-        auto curr = heads[i];
-        ASSERT(curr);
-        while (i > 0) {
-            while (curr && compare(e, curr->e)) {
-                curr = curr->s[i];
-            }
-            --i;
-        }
-        if (curr && are_equal(curr->e,e)) {
-            return const_iterator{curr};
-        }
-        else {
-            return end();
-        }
+        return find(e);
     }
 
     // TODO: NONE OF THESE ARE CORRECT

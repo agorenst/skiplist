@@ -142,6 +142,8 @@ TEST_CASE("void insert(std::initializer_list<value_type> ilist)") {
 
 
 
+// TODO: make sure we do the same number of copies and construction
+// as a std::set, both when the element exists and when it doesn't.
 TEST_CASE("std::pair<iterator,bool> emplace(Args&&... args)") {
     NoisyClass::reset_state();
     skip_list<NoisyClass> l;

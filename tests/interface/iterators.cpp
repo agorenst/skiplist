@@ -27,3 +27,6 @@ TEST_CASE("const_iterator rend() const") {
 }
 TEST_CASE("const_iterator crend() const") {
 }
+
+// TODO: what operations invalidate an iterator?
+// TODO: do iterators between different containers have constraints relative to each other?
