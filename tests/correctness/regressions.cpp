@@ -130,7 +130,7 @@ TEST_CASE("invariant violation") {
         int height = invariant_violation[i++];
         int to_insert = invariant_violation[i++];
         printf("%d %d %d\n", value, height, to_insert);
-        l.dbg_print();
+        //l.dbg_print();
         if (to_insert == 1) {
             l.insert(value, height);
             s.insert(value);
@@ -141,4 +141,29 @@ TEST_CASE("invariant violation") {
         }
         REQUIRE(equal(begin(l), end(l), begin(s), end(s)));
     }
+}
+
+#include <iostream>
+using namespace std;
+
+void do_insert_seq(skip_list<int>& l, int begin, int end) {
+    auto seed = skiplist_internal::rd();
+    cout << "Random seed: " << seed << endl;
+    skiplist_internal::gen.seed(seed);
+    for (; begin != end; ++begin) {
+        int height = std::min(30,skiplist_internal::good_height_generator())+1;
+        l.insert(begin, height);
+        cout << begin << ", " << height << ", " << endl;
+        REQUIRE(l.find(0) != l.end());
+    }
+}
+const int N = 20;
+TEST_CASE("find error 1") {
+    skip_list<int> l;
+    l.dbg_print();
+    l.insert(0,2);
+    l.dbg_print();
+    l.insert(1,10);
+    l.dbg_print();
+    REQUIRE(l.find(0) != l.end());
 }
